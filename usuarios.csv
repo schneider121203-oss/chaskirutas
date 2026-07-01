@@ -1,0 +1,8 @@
+id,telefono,otp,nombre,dni,rol,conductor_id,estado
+1,987654321,1234,Carlos Mendoza,45678901,conductor,1,ACTIVO
+2,976543210,1234,María Quispe,32109876,conductor,2,ACTIVO
+3,965432109,1234,Pedro Huamán,21098765,conductor,3,PENDIENTE
+4,912345678,1234,Jorge Del Solar,71234567,pasajero,,ACTIVO
+5,923456789,1234,Ana García,72345678,pasajero,,ACTIVO
+6,934567890,1234,Luis Ramos,73456789,pasajero,,ACTIVO
+7,900000000,0000,Admin ChaskiRutas,00000000,admin,,ACTIVO

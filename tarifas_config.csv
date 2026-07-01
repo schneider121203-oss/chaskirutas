@@ -1,0 +1,13 @@
+parametro,valor,unidad,descripcion
+tarifa_base,3.50,PEN,Cargo fijo por viaje
+costo_por_km,1.80,PEN/km,Costo por kilómetro recorrido (Haversine x1.35 factor vial)
+costo_por_min,0.30,PEN/min,Costo por minuto (velocidad promedio Lima 18 km/h)
+tarifa_servicio,1.50,PEN,Cargo de servicio de plataforma
+tarifa_minima,6.00,PEN,Tarifa mínima por viaje
+comision_plataforma,15,porcentaje,Comisión que ChaskiRutas cobra al conductor
+multiplicador_nocturno,1.30,factor,"Aplica de 22:00 a 06:00 (+30%)"
+multiplicador_hora_punta,1.20,factor,"Aplica de 07:00-09:00 y 17:00-20:00 (+20%)"
+rango_indrive_bajo,0.85,factor,Límite inferior del rango de tarifa estilo InDrive (-15%)
+rango_indrive_alto,1.15,factor,Límite superior del rango de tarifa estilo InDrive (+15%)
+velocidad_promedio_lima,18,km/h,Velocidad promedio con tráfico para cálculo de tiempo
+factor_vial,1.35,factor,Multiplicador sobre distancia geodésica para aproximar distancia real por calles

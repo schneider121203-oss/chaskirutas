@@ -1,0 +1,5 @@
+codigo,descripcion,tipo,valor,condicion,vigencia_hasta
+PRIMERA,50% off primer viaje,porcentaje,50,Solo primer viaje del usuario,2026-12-31
+AMIGO10,S/10 por referir amigo,monto_fijo,10,Amigo debe completar primer viaje,2026-12-31
+NOCHE20,20% off viajes nocturnos,porcentaje,20,Solo entre 22:00 y 06:00,2026-09-30
+FORMAL5,S/5 off para conductores nuevos formalizados,monto_fijo,5,Conductor con TUC recién emitida,2026-12-31

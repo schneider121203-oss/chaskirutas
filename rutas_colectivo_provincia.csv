@@ -1,0 +1,7 @@
+id,codigo,origen,destino,provincia,tarifa_persona,duracion,distancia_km,asientos_max,hora_salida
+101,CL-01,Lima,Cusco,Cusco,45,~22h,1105,4,18:00
+102,CL-02,Lima,Arequipa,Arequipa,35,~16h,1009,4,20:00
+103,CL-03,Lima,Huancayo,Junín,20,~7h,298,4,06:00
+104,CL-04,Lima,Ica,Ica,15,~4h,303,4,07:00
+105,CL-05,Lima,Huaraz,Áncash,25,~8h,400,4,22:00
+106,CL-06,Lima,Trujillo,La Libertad,30,~9h,557,4,21:00

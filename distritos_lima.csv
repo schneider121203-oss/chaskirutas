@@ -1,0 +1,21 @@
+id,nombre,zona,latitud,longitud
+1,San Isidro,Centro,-12.0977,-77.0365
+2,Miraflores,Centro,-12.1191,-77.0301
+3,Surco,Sur,-12.1464,-76.9919
+4,San Borja,Centro,-12.1067,-76.9986
+5,La Molina,Este,-12.0833,-76.9333
+6,Callao,Oeste,-12.0566,-77.1181
+7,Los Olivos,Norte,-11.9581,-77.0636
+8,SMP,Norte,-11.9778,-77.0522
+9,Ate,Este,-12.0247,-76.9186
+10,SJL,Noreste,-11.9655,-76.9672
+11,Cercado de Lima,Centro,-12.0464,-77.0428
+12,Barranco,Sur,-12.1503,-77.0219
+13,Jesús María,Centro,-12.0717,-77.0442
+14,Lince,Centro,-12.0833,-77.0333
+15,Pueblo Libre,Centro,-12.0747,-77.0639
+16,Rímac,Norte,-12.0250,-77.0300
+17,Villa El Salvador,Sur,-12.2125,-76.9436
+18,Chorrillos,Sur,-12.1708,-77.0150
+19,Breña,Centro,-12.0589,-77.0531
+20,Independencia,Norte,-11.9833,-77.0500

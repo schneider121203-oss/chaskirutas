@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chaskirutas-db-local
+    restart: always
+    environment:
+      POSTGRES_DB: chaskirutas
+      POSTGRES_USER: chaski_dba
+      POSTGRES_PASSWORD: Ch4sk1Rut4s_2026!
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Auto-run SQL schema on container creation
+      - ./chaskirutas_schema (1).sql:/docker-entrypoint-initdb.d/1-schema.sql
+      # Copy seed CSV data into container to load if needed
+      - .:/seeds
+
+  redis:
+    image: redis:7-alpine
+    container_name: chaskirutas-redis-local
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:

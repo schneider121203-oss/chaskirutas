@@ -1,0 +1,7 @@
+paso,titulo,descripcion,requisitos
+1,Registro ChaskiRutas,Cuenta verificada DNI + OTP,"DNI vigente|Teléfono activo"
+2,Documentos personales,DNI + licencia + antecedentes,"DNI ambas caras|Licencia A-IIA o A-IIB|Antecedentes penales y policiales"
+3,Documentos del vehículo,SOAT + CITV + tarjeta de propiedad,"SOAT vigente|CITV aprobado|Tarjeta de propiedad"
+4,Contrato de afiliación,Firma digital con ChaskiRutas,"Aceptar términos y condiciones|Firma digital"
+5,Trámite ATU,Solicitud de TUC 100% virtual,"Expediente completo|Pago de derecho S/ 41.20|Declaración jurada electrónica"
+6,¡Formalizado!,TUC emitida — operas 100% legal,"Tarjeta Única de Circulación activa|Vigencia 10 años"

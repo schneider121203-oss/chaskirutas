@@ -1,0 +1,6 @@
+id,nombre,telefono,licencia,clase_licencia,rating,viajes,estado,vehiculo_id,paso_formalizacion,foto
+1,Carlos Mendoza,987654321,Q12-34567890,A-IIB,4.72,248,ACTIVO,1,6,👨‍✈️
+2,María Quispe,976543210,Q12-98765432,A-IIA,4.91,187,ACTIVO,2,6,👩
+3,Pedro Huamán,965432109,Q12-11223344,A-IIB,4.18,45,PENDIENTE,3,3,👨
+4,Luis Fernández,943210987,Q12-99887766,A-IIB,4.55,132,ACTIVO,4,6,🧑
+5,Ana Rojas,932109876,Q12-44332211,A-IIA,4.83,203,ACTIVO,5,6,👩‍🦳

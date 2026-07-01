@@ -1,0 +1,147 @@
+// =====================================================================
+// ChaskiRutas — Enums TypeScript (mapeados 1:1 del schema SQL)
+// =====================================================================
+
+export enum UserStatus {
+  PENDIENTE = 'PENDIENTE',
+  ACTIVO = 'ACTIVO',
+  SUSPENDIDO = 'SUSPENDIDO',
+  BLOQUEADO = 'BLOQUEADO',
+}
+
+export enum DriverStatus {
+  EN_REGISTRO = 'EN_REGISTRO',
+  EN_FORMALIZACION = 'EN_FORMALIZACION',
+  ACTIVO = 'ACTIVO',
+  SUSPENDIDO = 'SUSPENDIDO',
+  BAJA = 'BAJA',
+}
+
+export enum VehicleStatus {
+  EN_REGISTRO = 'EN_REGISTRO',
+  ACTIVO = 'ACTIVO',
+  MANTENIMIENTO = 'MANTENIMIENTO',
+  SUSPENDIDO = 'SUSPENDIDO',
+  BAJA = 'BAJA',
+}
+
+export enum TripStatus {
+  RESERVADO = 'RESERVADO',
+  EN_CAMINO = 'EN_CAMINO',
+  EN_CURSO = 'EN_CURSO',
+  COMPLETADO = 'COMPLETADO',
+  CANCELADO_PASAJERO = 'CANCELADO_PASAJERO',
+  CANCELADO_CONDUCTOR = 'CANCELADO_CONDUCTOR',
+  NO_SHOW = 'NO_SHOW',
+}
+
+export enum BookingStatus {
+  PENDIENTE = 'PENDIENTE',
+  CONFIRMADO = 'CONFIRMADO',
+  ABORDADO = 'ABORDADO',
+  COMPLETADO = 'COMPLETADO',
+  CANCELADO = 'CANCELADO',
+  NO_SHOW = 'NO_SHOW',
+}
+
+export enum PaymentMethodType {
+  TARJETA = 'TARJETA',
+  YAPE = 'YAPE',
+  PLIN = 'PLIN',
+  EFECTIVO = 'EFECTIVO',
+  BILLETERA_INTERNA = 'BILLETERA_INTERNA',
+}
+
+export enum PaymentStatus {
+  PENDIENTE = 'PENDIENTE',
+  AUTORIZADO = 'AUTORIZADO',
+  PAGADO = 'PAGADO',
+  REEMBOLSADO = 'REEMBOLSADO',
+  FALLIDO = 'FALLIDO',
+}
+
+export enum InvoiceType {
+  BOLETA = 'BOLETA',
+  FACTURA = 'FACTURA',
+  NOTA_CREDITO = 'NOTA_CREDITO',
+}
+
+export enum RouteModality {
+  TAXI_EJECUTIVO = 'TAXI_EJECUTIVO',
+  TAXI_REMISSE = 'TAXI_REMISSE',
+  COLECTIVO_M1 = 'COLECTIVO_M1',
+  COLECTIVO_M2 = 'COLECTIVO_M2',
+}
+
+export enum JurisdictionType {
+  ATU_LIMA_CALLAO = 'ATU_LIMA_CALLAO',
+  DRTC = 'DRTC',
+  MUNICIPALIDAD_PROVINCIAL = 'MUNICIPALIDAD_PROVINCIAL',
+  MTC = 'MTC',
+}
+
+export enum DocumentKind {
+  DNI = 'DNI',
+  LICENCIA = 'LICENCIA',
+  SOAT = 'SOAT',
+  REVISION_TECNICA = 'REVISION_TECNICA',
+  TARJETA_PROPIEDAD = 'TARJETA_PROPIEDAD',
+  TUC = 'TUC',
+  ANTECEDENTES = 'ANTECEDENTES',
+  SEGURO_COMPLEMENTARIO = 'SEGURO_COMPLEMENTARIO',
+  OTRO = 'OTRO',
+}
+
+export enum IncidentType {
+  SOS = 'SOS',
+  RECLAMO_TARIFA = 'RECLAMO_TARIFA',
+  OBJETO_PERDIDO = 'OBJETO_PERDIDO',
+  CHOQUE = 'CHOQUE',
+  CANCELACION_ABUSIVA = 'CANCELACION_ABUSIVA',
+  CONDUCTA = 'CONDUCTA',
+  OTRO = 'OTRO',
+}
+
+export enum IncidentStatus {
+  ABIERTO = 'ABIERTO',
+  EN_REVISION = 'EN_REVISION',
+  CERRADO_RESUELTO = 'CERRADO_RESUELTO',
+  CERRADO_DESESTIMADO = 'CERRADO_DESESTIMADO',
+}
+
+export enum ExpenseCategory {
+  COMBUSTIBLE = 'COMBUSTIBLE',
+  MANTENIMIENTO = 'MANTENIMIENTO',
+  REPUESTOS = 'REPUESTOS',
+  SEGURO = 'SEGURO',
+  PEAJE = 'PEAJE',
+  MULTA = 'MULTA',
+  OTRO = 'OTRO',
+}
+
+export enum SettlementStatus {
+  PENDIENTE = 'PENDIENTE',
+  PROCESADA = 'PROCESADA',
+  PAGADA = 'PAGADA',
+  RECHAZADA = 'RECHAZADA',
+}
+
+export enum UserRole {
+  PASAJERO = 'PASAJERO',
+  CONDUCTOR = 'CONDUCTOR',
+  ADMIN = 'ADMIN',
+  OPERADOR = 'OPERADOR',
+  SUPERVISOR = 'SUPERVISOR',
+}
+
+export enum OtpChannel {
+  SMS = 'SMS',
+  EMAIL = 'EMAIL',
+}
+
+export enum NotificationChannel {
+  PUSH = 'PUSH',
+  SMS = 'SMS',
+  EMAIL = 'EMAIL',
+  IN_APP = 'IN_APP',
+}

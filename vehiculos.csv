@@ -1,0 +1,6 @@
+id,placa,marca,modelo,anio,color,estado,tuc
+1,ABC-123,Toyota,Yaris,2020,Blanco,ACTIVO,TUC-2024-00123
+2,DEF-456,Hyundai,Accent,2021,Gris,ACTIVO,TUC-2024-00456
+3,GHI-789,Kia,Rio,2019,Negro,PENDIENTE,
+4,JKL-012,Suzuki,Swift,2022,Rojo,ACTIVO,TUC-2024-00789
+5,MNO-345,Toyota,Corolla,2021,Blanco,ACTIVO,TUC-2024-01012

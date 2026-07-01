@@ -1,0 +1,5 @@
+nivel,puntos_minimos,beneficios
+Bronce,0,"Acumulación básica de puntos (x2 del monto)"
+Plata,100,"Acumulación x2 + Prioridad en matching"
+Oro,200,"Acumulación x2 + Prioridad matching + 5% descuento en viajes"
+Platino,500,"Acumulación x3 + Prioridad VIP + 10% descuento + Soporte prioritario"

@@ -1,0 +1,10 @@
+{
+  "vpc_id": "vpc-0ffd2abaca2191914",
+  "subnet_1": "subnet-0fa9a0933bd12152c",
+  "subnet_2": "subnet-0b6d84d95aa5ff197",
+  "sg_ec2_id": "sg-077ac6215460a479e",
+  "sg_rds_id": "sg-0b189d201fec1306c",
+  "rds_identifier": "chaskirutas-db",
+  "ec2_instance_id": "i-0b9189fe56f555f20",
+  "s3_bucket": "chaskirutas-docs-255834079172"
+}

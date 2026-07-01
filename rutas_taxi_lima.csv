@@ -1,0 +1,8 @@
+id,codigo,nombre,origen,destino,tarifa,duracion_min,distancia_km,paradas
+1,TX-01,San Isidro → Miraflores,San Isidro,Miraflores,8.50,15,5.2,"Óvalo Gutiérrez|Parque Kennedy"
+2,TX-02,Surco → San Borja,Santiago de Surco,San Borja,7.00,12,4.1,"Jockey Plaza|Pentagonito"
+3,TX-03,Callao → Centro de Lima,Callao,Cercado de Lima,12.00,25,11.8,"Jorge Chávez|Plaza San Martín"
+4,TX-04,Los Olivos → SMP,Los Olivos,San Martín de Porres,6.00,10,3.5,"Metro Naranjal|Av. Perú"
+5,TX-05,Ate → La Molina,Ate Vitarte,La Molina,9.00,18,7.3,"Puruchuco|USIL"
+6,TX-06,SJL → Rímac,San Juan de Lurigancho,Rímac,8.00,22,9.1,"Metro Bayóvar|Plaza de Acho"
+7,TX-07,Villa El Salvador → Barranco,Villa El Salvador,Barranco,11.00,30,14.2,"Estación VES|Puente de los Suspiros"
