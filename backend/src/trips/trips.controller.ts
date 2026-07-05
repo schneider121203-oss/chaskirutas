@@ -14,6 +14,12 @@ import { TripStatus } from '../common/enums';
 export class TripsController {
   constructor(private readonly tripsService: TripsService) {}
 
+  @Get('routes')
+  @ApiOperation({ summary: 'Obtener lista de rutas de taxi disponibles' })
+  getTaxiRoutes() {
+    return this.tripsService.getTaxiRoutes();
+  }
+
   @Post('estimate')
   @ApiOperation({ summary: 'Calcular tarifa estimada del viaje' })
   estimate(@Body() dto: EstimateTripDto) {
@@ -48,6 +54,12 @@ export class TripsController {
   @ApiOperation({ summary: 'Actualizar estado del viaje (EN_CAMINO -> EN_CURSO -> COMPLETADO)' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateTripStatusDto) {
     return this.tripsService.updateStatus(id, dto.status as TripStatus);
+  }
+
+  @Post(':id/accept')
+  @ApiOperation({ summary: 'Conductor acepta el viaje y se lo auto-asigna' })
+  acceptTrip(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.tripsService.acceptTrip(id, user.sub);
   }
 
   @Post(':id/location')

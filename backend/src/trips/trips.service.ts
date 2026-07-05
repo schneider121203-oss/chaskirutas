@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Trip, Booking, TripLocation, Rating, Route, User, DriverEarning, Invoice, Company } from '../entities';
 import { EstimateTripDto, RequestTripDto, RateTripDto, StreamLocationDto } from './dto';
 import { PricingService } from './pricing.service';
-import { TripStatus, BookingStatus, InvoiceType, DriverStatus } from '../common/enums';
+import { TripStatus, BookingStatus, InvoiceType, DriverStatus, RouteModality } from '../common/enums';
 import { NubefactService } from '../integrations/nubefact.service';
 
 @Injectable()
@@ -31,6 +31,14 @@ export class TripsService {
     private readonly pricingService: PricingService,
     private readonly nubefactService: NubefactService,
   ) {}
+
+  async getTaxiRoutes() {
+    return this.routeRepo.find({
+      where: { modality: RouteModality.TAXI_EJECUTIVO, isActive: true },
+      relations: { originDistrict: true, destinationDistrict: true },
+      order: { name: 'ASC' },
+    });
+  }
 
   async estimate(dto: EstimateTripDto) {
     const distance = this.pricingService.calculateDistance(
@@ -66,34 +74,11 @@ export class TripsService {
     const route = await this.routeRepo.findOne({ where: { id: dto.routeId } });
     if (!route) throw new NotFoundException('Ruta no encontrada');
 
-    // Simulate match or search flow. We create the trip in database.
-    // Encontrar dinámicamente al conductor activo más reciente en la base de datos
-    const activeDriverUser = await this.userRepo.findOne({
-      where: {
-        driver: {
-          status: DriverStatus.ACTIVO,
-        },
-      },
-      relations: { driver: true },
-      order: { createdAt: 'DESC' },
-    });
-
-    if (!activeDriverUser || !activeDriverUser.driver) {
-      throw new BadRequestException('No hay conductores activos formalizados en la base de datos. Completa la formalización primero.');
-    }
-    const driverUser = activeDriverUser;
-
-    // Find driver vehicle
-    const vehicle = await this.tripRepo.manager.createQueryBuilder('Vehicle', 'v')
-      .where('v.owner_user_id = :driverId', { driverId: driverUser.id })
-      .getRawOne();
-
-    const vehicleId = vehicle ? vehicle.v_id : '00000000-0000-0000-0000-000000000000'; // Fallback UUID
-
+    // Create trip WITHOUT assigning a driver — any active driver can claim it
     const trip = this.tripRepo.create({
       routeId: dto.routeId,
-      vehicleId: vehicleId,
-      driverId: driverUser.id,
+      vehicleId: null,
+      driverId: null,
       scheduledDeparture: new Date(),
       seatsTotal: 4,
       seatsAvailable: 3,
@@ -121,12 +106,6 @@ export class TripsService {
     return {
       trip: savedTrip,
       bookingId: booking.id,
-      driver: {
-        id: driverUser.id,
-        fullName: driverUser.fullName,
-        phone: driverUser.phoneE164,
-        rating: driverUser.driver.ratingAvg,
-      },
     };
   }
 
@@ -175,7 +154,7 @@ export class TripsService {
 
     // Determine target user id
     const isPassenger = booking.passengerId === raterUserId;
-    const ratedUserId = isPassenger ? booking.trip.driverId : booking.passengerId;
+    const ratedUserId = (isPassenger ? booking.trip.driverId : booking.passengerId)!;
     const roleOfRater = isPassenger ? 'PASAJERO' : 'CONDUCTOR';
 
     const rating = this.ratingRepo.create({
@@ -192,11 +171,50 @@ export class TripsService {
   }
 
   async getHistory(userId: string) {
-    return this.bookingRepo.find({
+    const driverTrips = await this.tripRepo.find({
+      where: { driverId: userId },
+      relations: { driver: { user: true } },
+      order: { createdAt: 'DESC' },
+    });
+
+    const bookings = await this.bookingRepo.find({
       where: { passengerId: userId },
-      relations: { trip: { route: true, driver: { user: true } } },
+      relations: { trip: { driver: { user: true } }, passenger: { user: true } },
       order: { bookedAt: 'DESC' },
     });
+
+    const results = [];
+
+    for (const trip of driverTrips) {
+      const booking = await this.bookingRepo.findOne({
+        where: { tripId: trip.id },
+        relations: { passenger: { user: true } }
+      });
+      results.push({
+        id: trip.id,
+        status: trip.status,
+        fare: trip.baseFarePen,
+        createdAt: trip.createdAt,
+        driver: { fullName: trip.driver?.user?.fullName || 'Conductor' },
+        passenger: { fullName: booking?.passenger?.user?.fullName || 'Pasajero' }
+      });
+    }
+
+    for (const b of bookings) {
+      if (b.trip) {
+        results.push({
+          id: b.trip.id,
+          status: b.trip.status,
+          fare: b.farePen,
+          createdAt: b.bookedAt,
+          driver: { fullName: b.trip.driver?.user?.fullName || 'Conductor asignado' },
+          passenger: { fullName: b.passenger?.user?.fullName || 'Pasajero' }
+        });
+      }
+    }
+
+    results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return results;
   }
 
   // Completes booking lifecycle: Earning + Nubefact Invoice
@@ -217,7 +235,7 @@ export class TripsService {
       const net = gross - platformFee;
 
       const earning = this.earningRepo.create({
-        driverId: trip.driverId,
+        driverId: trip.driverId!,
         tripId: trip.id,
         grossPen: gross,
         platformFeePen: platformFee,
@@ -264,13 +282,25 @@ export class TripsService {
   }
 
   async getCurrentRequest(driverId: string) {
-    const trip = await this.tripRepo.findOne({
+    // First check if this driver already has an active trip assigned to them
+    const myTrip = await this.tripRepo.findOne({
       where: {
         driverId,
         status: TripStatus.RESERVADO,
       },
       relations: { route: true },
     });
+
+    // If no assigned trip, look for ANY unassigned pending trip
+    const trip = myTrip || await this.tripRepo.findOne({
+      where: {
+        driverId: IsNull(),
+        status: TripStatus.RESERVADO,
+      },
+      relations: { route: true },
+      order: { createdAt: 'ASC' }, // oldest first (FIFO)
+    });
+
     if (!trip) return null;
 
     const booking = await this.bookingRepo.findOne({
@@ -282,5 +312,23 @@ export class TripsService {
       trip,
       booking,
     };
+  }
+
+  async acceptTrip(tripId: string, driverId: string) {
+    const trip = await this.tripRepo.findOne({ where: { id: tripId } });
+    if (!trip) throw new NotFoundException('Viaje no encontrado');
+
+    // Find driver's vehicle
+    const vehicle = await this.tripRepo.manager
+      .getRepository('Vehicle')
+      .findOne({ where: { ownerUserId: driverId } } as any);
+
+    trip.driverId = driverId;
+    trip.vehicleId = vehicle ? (vehicle as any).id : null;
+    trip.status = TripStatus.EN_CAMINO;
+    trip.actualDeparture = new Date();
+    trip.updatedAt = new Date();
+
+    return this.tripRepo.save(trip);
   }
 }

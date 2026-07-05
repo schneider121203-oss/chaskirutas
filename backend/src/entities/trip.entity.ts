@@ -16,19 +16,19 @@ export class Trip {
   @JoinColumn({ name: 'route_id' })
   route!: Route;
 
-  @Column({ name: 'vehicle_id', type: 'uuid' })
-  vehicleId!: string;
+  @Column({ name: 'vehicle_id', type: 'uuid', nullable: true })
+  vehicleId!: string | null;
 
   @ManyToOne(() => Vehicle)
   @JoinColumn({ name: 'vehicle_id' })
-  vehicle!: Vehicle;
+  vehicle!: Vehicle | null;
 
-  @Column({ name: 'driver_id', type: 'uuid' })
-  driverId!: string;
+  @Column({ name: 'driver_id', type: 'uuid', nullable: true })
+  driverId!: string | null;
 
   @ManyToOne(() => Driver)
   @JoinColumn({ name: 'driver_id', referencedColumnName: 'userId' })
-  driver!: Driver;
+  driver!: Driver | null;
 
   @Column({ name: 'scheduled_departure', type: 'timestamp' })
   scheduledDeparture!: Date;

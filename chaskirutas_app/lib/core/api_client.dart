@@ -7,7 +7,7 @@ class ApiClient {
   final secureStorage = const FlutterSecureStorage();
 
   // Toggle this to switch between local development and AWS production
-  static const bool useAwsBackend = true;
+  static const bool useAwsBackend = false;
   static const String awsBaseUrl = 'http://100.28.130.167:3000/api';
 
   // Resolves the backend host depending on Android/iOS Emulator vs physical device
@@ -44,7 +44,45 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
-          // Auto token refresh could be wired here if needed
+          if (error.response?.statusCode == 401 && error.requestOptions.path != '/auth/refresh') {
+            final refreshToken = await secureStorage.read(key: 'refreshToken');
+            
+            if (refreshToken != null) {
+              try {
+                // Instanciar un Dio limpio para no disparar el interceptor recursivamente
+                final refreshDio = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
+                final res = await refreshDio.post('/auth/refresh', data: {
+                  'refreshToken': refreshToken
+                });
+
+                final newAccessToken = res.data['accessToken'];
+                final newRefreshToken = res.data['refreshToken'];
+
+                if (newAccessToken != null && newRefreshToken != null) {
+                  await saveTokens(newAccessToken, newRefreshToken);
+                  
+                  // Reintentar la petición original con el nuevo token
+                  final options = error.requestOptions;
+                  options.headers['Authorization'] = 'Bearer $newAccessToken';
+                  
+                  final cloneReq = await refreshDio.request(
+                    options.path,
+                    options: Options(
+                      method: options.method,
+                      headers: options.headers,
+                    ),
+                    data: options.data,
+                    queryParameters: options.queryParameters,
+                  );
+                  return handler.resolve(cloneReq);
+                }
+              } catch (e) {
+                // Si el refresh falla (refresh token expirado o inválido), limpiar credenciales
+                await clearTokens();
+                // Opcional: Emitir algún evento global o recargar la app.
+              }
+            }
+          }
           return handler.next(error);
         },
       ),

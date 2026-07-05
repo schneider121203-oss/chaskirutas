@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme.dart';
-import 'features/auth/auth_provider.dart';
-import 'features/auth/login_view.dart';
-import 'features/dashboard_switch.dart';
+import 'features/splash/splash_view.dart';
 
 void main() {
   runApp(
@@ -18,17 +16,12 @@ class ChaskiRutasApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-
     return MaterialApp(
       title: 'ChaskiRutas',
       debugShowCheckedModeBanner: false,
       theme: ChaskiTheme.darkTheme,
-      // Dynamic Root selection: If authenticated, render DashboardSwitch (drawer + screens)
-      // otherwise fallback to LoginView (phone + OTP).
-      home: authState.accessToken != null
-          ? const DashboardSwitch()
-          : const LoginView(),
+      // SplashScreen handles auth check and routes to the correct shell
+      home: const SplashView(),
     );
   }
 }

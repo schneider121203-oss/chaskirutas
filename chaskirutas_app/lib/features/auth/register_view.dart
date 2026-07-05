@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_provider.dart';
+import '../../core/theme.dart';
 
 class RegisterView extends ConsumerStatefulWidget {
   const RegisterView({super.key});
@@ -55,9 +56,11 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Registro exitoso! Por favor inicia sesión.'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: const Text('¡Registro exitoso! Por favor inicia sesión.'),
+            backgroundColor: ChaskiTheme.accent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
         Navigator.pop(context);
@@ -66,7 +69,9 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error ?? 'Error al registrarse'),
-            backgroundColor: Colors.red,
+            backgroundColor: ChaskiTheme.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
@@ -78,133 +83,274 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     final state = ref.watch(authProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Crear Cuenta'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Únete a ChaskiRutas',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Formalizando el transporte peruano',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                // Role Selector
-                Row(
-                  children: [
-                    Expanded(
-                      child: ChoiceChip(
-                        label: const Center(child: Text('Pasajero')),
-                        selected: _selectedRole == 'PASAJERO',
-                        selectedColor: Theme.of(context).primaryColor,
-                        onSelected: (val) {
-                          if (val) setState(() => _selectedRole = 'PASAJERO');
-                        },
+      appBar: AppBar(title: const Text('Crear cuenta')),
+      body: Container(
+        decoration: const BoxDecoration(gradient: ChaskiTheme.backgroundGradient),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '¡Únete a ChaskiRutas!',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: ChaskiTheme.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Formalizando el transporte peruano',
+                    style: TextStyle(fontSize: 14, color: ChaskiTheme.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 28),
+
+                  // ── Role selector ──────────────────────────────────────────
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _selectedRole = 'PASAJERO'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              gradient: _selectedRole == 'PASAJERO'
+                                  ? ChaskiTheme.primaryGradient
+                                  : null,
+                              color: _selectedRole == 'PASAJERO' ? null : ChaskiTheme.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _selectedRole == 'PASAJERO'
+                                    ? ChaskiTheme.primary
+                                    : ChaskiTheme.border,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.hail_rounded,
+                                  color: _selectedRole == 'PASAJERO'
+                                      ? Colors.white
+                                      : ChaskiTheme.textSecondary,
+                                  size: 28,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Pasajero',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: _selectedRole == 'PASAJERO'
+                                        ? Colors.white
+                                        : ChaskiTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _selectedRole = 'CONDUCTOR'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              gradient: _selectedRole == 'CONDUCTOR'
+                                  ? ChaskiTheme.conductorGradient
+                                  : null,
+                              color: _selectedRole == 'CONDUCTOR' ? null : ChaskiTheme.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _selectedRole == 'CONDUCTOR'
+                                    ? ChaskiTheme.secondary
+                                    : ChaskiTheme.border,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.drive_eta_rounded,
+                                  color: _selectedRole == 'CONDUCTOR'
+                                      ? Colors.white
+                                      : ChaskiTheme.textSecondary,
+                                  size: 28,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Conductor',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: _selectedRole == 'CONDUCTOR'
+                                        ? Colors.white
+                                        : ChaskiTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+
+                  // ── Fields ─────────────────────────────────────────────────
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre Completo',
+                      hintText: 'Juan Pérez',
+                      prefixIcon: Icon(Icons.person_rounded, color: ChaskiTheme.textSecondary),
+                    ),
+                    validator: (val) => val == null || val.isEmpty ? 'Requerido' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Celular',
+                      hintText: '+51987654321',
+                      prefixIcon: Icon(Icons.phone_iphone_rounded, color: ChaskiTheme.textSecondary),
+                    ),
+                    validator: (val) => val == null || !val.startsWith('+51') || val.length != 12
+                        ? 'Formato: +51XXXXXXXXX'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _dniController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'DNI',
+                      hintText: '8 dígitos',
+                      prefixIcon: Icon(Icons.badge_rounded, color: ChaskiTheme.textSecondary),
+                    ),
+                    validator: (val) => val == null || val.length != 8 ? 'DNI debe tener 8 dígitos' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Contraseña',
+                      prefixIcon: Icon(Icons.lock_rounded, color: ChaskiTheme.textSecondary),
+                    ),
+                    validator: (val) => val == null || val.length < 6 ? 'Mínimo 6 caracteres' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo Electrónico (Opcional)',
+                      prefixIcon: Icon(Icons.email_rounded, color: ChaskiTheme.textSecondary),
+                    ),
+                  ),
+
+                  // ── Driver fields ──────────────────────────────────────────
+                  if (_selectedRole == 'CONDUCTOR') ...[
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: ChaskiTheme.secondary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: ChaskiTheme.secondary.withValues(alpha: 0.3), width: 1),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.drive_eta_rounded, color: ChaskiTheme.secondary, size: 20),
+                          SizedBox(width: 10),
+                          Text(
+                            'Datos de Brevete / Licencia',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: ChaskiTheme.secondary,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ChoiceChip(
-                        label: const Center(child: Text('Conductor')),
-                        selected: _selectedRole == 'CONDUCTOR',
-                        selectedColor: Theme.of(context).primaryColor,
-                        onSelected: (val) {
-                          if (val) setState(() => _selectedRole = 'CONDUCTOR');
-                        },
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _licenseNumberController,
+                      decoration: const InputDecoration(
+                        labelText: 'Número de Licencia',
+                        hintText: 'Q12345678',
                       ),
+                      validator: (val) => _selectedRole == 'CONDUCTOR' && (val == null || val.isEmpty)
+                          ? 'Requerido para conductor'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _licenseClassController,
+                      decoration: const InputDecoration(
+                        labelText: 'Clase/Categoría',
+                        hintText: 'A-IIa',
+                      ),
+                      validator: (val) => _selectedRole == 'CONDUCTOR' && (val == null || val.isEmpty)
+                          ? 'Requerido para conductor'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _licenseExpiresController,
+                      decoration: const InputDecoration(
+                        labelText: 'Fecha de Expiración',
+                        hintText: 'YYYY-MM-DD',
+                      ),
+                      validator: (val) => _selectedRole == 'CONDUCTOR' && (val == null || val.isEmpty)
+                          ? 'Requerido para conductor'
+                          : null,
                     ),
                   ],
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Nombre Completo', hintText: 'Juan Pérez'),
-                  validator: (val) => val == null || val.isEmpty ? 'Requerido' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Celular', hintText: '+51987654321'),
-                  validator: (val) => val == null || !val.startsWith('+51') || val.length != 12
-                      ? 'Debe tener formato +51XXXXXXXXX'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _dniController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'DNI', hintText: '8 dígitos'),
-                  validator: (val) => val == null || val.length != 8 ? 'DNI debe tener 8 dígitos' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Contraseña'),
-                  validator: (val) => val == null || val.length < 6 ? 'Mínimo 6 caracteres' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Correo Electrónico (Opcional)'),
-                ),
-                if (_selectedRole == 'CONDUCTOR') ...[
-                  const SizedBox(height: 24),
-                  const Divider(color: Colors.grey),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Datos de Brevete / Licencia',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+
+                  const SizedBox(height: 36),
+                  GestureDetector(
+                    onTap: state.isLoading ? null : _submit,
+                    child: Container(
+                      height: 56,
+                      decoration: BoxDecoration(
+                        gradient: state.isLoading ? null : ChaskiTheme.primaryGradient,
+                        color: state.isLoading ? ChaskiTheme.border : null,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: state.isLoading ? null : ChaskiTheme.primaryGlow,
+                      ),
+                      child: Center(
+                        child: state.isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                              )
+                            : const Text(
+                                'Crear Cuenta',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _licenseNumberController,
-                    decoration: const InputDecoration(labelText: 'Número de Licencia', hintText: 'Q12345678'),
-                    validator: (val) => _selectedRole == 'CONDUCTOR' && (val == null || val.isEmpty)
-                        ? 'Requerido para conductor'
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _licenseClassController,
-                    decoration: const InputDecoration(labelText: 'Clase/Categoría', hintText: 'A-IIa'),
-                    validator: (val) => _selectedRole == 'CONDUCTOR' && (val == null || val.isEmpty)
-                        ? 'Requerido para conductor'
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _licenseExpiresController,
-                    decoration: const InputDecoration(labelText: 'Fecha de Expiración', hintText: 'YYYY-MM-DD'),
-                    validator: (val) => _selectedRole == 'CONDUCTOR' && (val == null || val.isEmpty)
-                        ? 'Requerido para conductor'
-                        : null,
-                  ),
+                  const SizedBox(height: 32),
                 ],
-                const SizedBox(height: 32),
-                ElevatedButton(
-                  onPressed: state.isLoading ? null : _submit,
-                  child: state.isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Registrarse'),
-                ),
-              ],
+              ),
             ),
           ),
         ),

@@ -16,6 +16,23 @@ class AuthState {
     this.accessToken,
   });
 
+  /// Returns 'CONDUCTOR' if the profile contains a driver sub-object or
+  /// a CONDUCTOR role entry; otherwise returns 'PASAJERO'.
+  String get userRole {
+    if (userProfile == null) return 'PASAJERO';
+    // If the profile has a 'driver' sub-object, the user is a conductor
+    if (userProfile!['driver'] != null) return 'CONDUCTOR';
+    // Check 'roles' array (list of {role: 'CONDUCTOR'} maps)
+    final roles = userProfile!['roles'];
+    if (roles is List) {
+      for (final r in roles) {
+        if (r is Map && r['role'] == 'CONDUCTOR') return 'CONDUCTOR';
+        if (r is String && r == 'CONDUCTOR') return 'CONDUCTOR';
+      }
+    }
+    return 'PASAJERO';
+  }
+
   AuthState copyWith({
     bool? isLoading,
     String? errorMessage,
