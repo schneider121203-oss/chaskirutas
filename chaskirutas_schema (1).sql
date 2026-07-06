@@ -286,12 +286,16 @@ CREATE TABLE routes (
 );
 
 -- BLINDAJE LEGAL: prohíbe registrar colectivos en jurisdicción ATU (Lima/Callao)
+-- SET search_path fija la resolución de tipos/tablas al ejecutar el trigger
+-- (sin esto, el enum jurisdiction_type no se resuelve en inserts de la app).
 CREATE OR REPLACE FUNCTION enforce_collective_ban_lima()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+SET search_path = chaski, public
+AS $$
 DECLARE
-    j_type jurisdiction_type;
+    j_type chaski.jurisdiction_type;
 BEGIN
-    SELECT type INTO j_type FROM jurisdictions WHERE id = NEW.jurisdiction_id;
+    SELECT type INTO j_type FROM chaski.jurisdictions WHERE id = NEW.jurisdiction_id;
     IF j_type = 'ATU_LIMA_CALLAO' AND NEW.modality IN ('COLECTIVO_M1','COLECTIVO_M2') THEN
         RAISE EXCEPTION 'No se puede registrar una ruta colectiva en Lima/Callao. El colectivo está prohibido por la ATU; usa modalidad TAXI_EJECUTIVO o TAXI_REMISSE.';
     END IF;
@@ -355,8 +359,10 @@ CREATE TABLE route_assignments (
 CREATE TABLE trips (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     route_id            INT  NOT NULL REFERENCES routes(id),
-    vehicle_id          UUID NOT NULL REFERENCES vehicles(id),
-    driver_id           UUID NOT NULL REFERENCES drivers(user_id),
+    -- Nullable: en el flujo tipo inDrive el pasajero crea el viaje ANTES de que
+    -- un conductor lo acepte; el vehículo/conductor se asignan al aceptar.
+    vehicle_id          UUID REFERENCES vehicles(id),
+    driver_id           UUID REFERENCES drivers(user_id),
     scheduled_departure TIMESTAMP NOT NULL,
     actual_departure    TIMESTAMP,
     actual_arrival      TIMESTAMP,

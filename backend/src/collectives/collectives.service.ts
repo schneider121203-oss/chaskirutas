@@ -90,18 +90,12 @@ export class CollectivesService {
     //    Nota: para alta concurrencia real conviene envolver 3-4 en una
     //    transacción con bloqueo pesimista del asiento.
     if (!trip) {
-      // El conductor programa el viaje en producción. Para el demo se auto-crea.
-      // Carlos Mendoza (+51987654321) como conductor por defecto.
-      const driver = await this.passengerRepo.manager.createQueryBuilder('User', 'u')
-        .where('u.phone_e164 = :phone', { phone: '+51987654321' })
-        .getRawOne();
-
-      const driverId = driver ? driver.u_id : passengerId; // fallback
-
+      // El conductor programa el viaje en producción. Para el demo se auto-crea
+      // un viaje SIN conductor/vehículo asignado aún (ambos son nullable).
       trip = this.tripRepo.create({
         routeId: route.id,
-        vehicleId: '00000000-0000-0000-0000-000000000000', // Mock UUID
-        driverId,
+        vehicleId: null,
+        driverId: null,
         scheduledDeparture: new Date(Date.now() + 24 * 60 * 60 * 1000), // Mañana
         seatsTotal: route.seatsPerUnit,
         seatsAvailable: route.seatsPerUnit - 1,
