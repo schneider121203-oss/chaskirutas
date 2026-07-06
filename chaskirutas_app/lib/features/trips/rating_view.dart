@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
-import '../../core/api_client.dart';
+import '../auth/auth_provider.dart';
 
 class RatingView extends ConsumerStatefulWidget {
   final String bookingId; // el backend califica por bookingId (POST /trips/:bookingId/rate)
