@@ -1,5 +1,11 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, IsInt, Min, Max, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export enum TripCategory {
+  ESTANDAR = 'ESTANDAR',
+  CONFORT = 'CONFORT',
+  XL = 'XL',
+}
 
 export class EstimateTripDto {
   @ApiProperty({ example: -12.046374, description: 'Latitud origen' })
@@ -17,6 +23,15 @@ export class EstimateTripDto {
   @ApiProperty({ example: -77.022143, description: 'Longitud destino' })
   @IsNumber()
   endLng!: number;
+
+  @ApiPropertyOptional({
+    enum: TripCategory,
+    example: TripCategory.ESTANDAR,
+    description: 'Categoría del viaje. Por defecto ESTANDAR (x1.0)',
+  })
+  @IsOptional()
+  @IsEnum(TripCategory)
+  category?: TripCategory;
 }
 
 export class RequestTripDto {

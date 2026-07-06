@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, OneToOne } from 'typeorm';
+import { Exclude } from 'class-transformer';
 import { UserStatus } from '../common/enums';
 import { UserRoleEntity } from './user-role.entity';
 import { Passenger } from './passenger.entity';
@@ -15,7 +16,9 @@ export class User {
   @Column({ name: 'phone_e164', type: 'varchar', length: 20, unique: true })
   phoneE164!: string;
 
-  @Column({ name: 'password_hash', type: 'varchar', length: 255 })
+  // @Exclude + select:false → nunca se selecciona ni se serializa (no filtra el hash).
+  @Exclude()
+  @Column({ name: 'password_hash', type: 'varchar', length: 255, select: false })
   passwordHash!: string;
 
   @Column({ name: 'full_name', type: 'varchar', length: 160 })

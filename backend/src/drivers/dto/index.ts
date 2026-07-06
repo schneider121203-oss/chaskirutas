@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsEnum, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, IsEnum, IsBoolean, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentKind } from '../../common/enums';
 
@@ -81,4 +81,28 @@ export class UploadDocumentDto {
   @IsOptional()
   @IsString()
   expiresAt?: string;
+}
+
+// Declaración Jurada para la TUC (ATU). Los datos personales/vehiculares se
+// autocompletan desde la cuenta; aquí solo llegan los campos manuales + la
+// aceptación bajo juramento.
+export class SubmitDeclarationDto {
+  @ApiPropertyOptional({ example: 'ABC123456', description: 'N° de motor del vehículo' })
+  @IsOptional()
+  @IsString()
+  engineNumber?: string;
+
+  @ApiPropertyOptional({ example: 'Blanco', description: 'Color del vehículo (si no estaba registrado)' })
+  @IsOptional()
+  @IsString()
+  color?: string;
+
+  @ApiPropertyOptional({ example: 'ATU-2026-000123', description: 'N° de autorización ATU (si lo tienes)' })
+  @IsOptional()
+  @IsString()
+  atuAuthorization?: string;
+
+  @ApiProperty({ example: true, description: 'Aceptación bajo juramento de las 9 declaraciones' })
+  @IsBoolean()
+  acceptedUnderOath!: boolean;
 }

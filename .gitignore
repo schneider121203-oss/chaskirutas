@@ -98,3 +98,6 @@ typings/
 # Local infra
 /infra/terraform.tfstate*
 /infra/.terraform/
+
+# Claude Code (tooling local)
+.claude/

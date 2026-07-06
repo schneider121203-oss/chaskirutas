@@ -162,7 +162,7 @@ class _PaymentCheckoutViewState extends ConsumerState<PaymentCheckoutView> {
                         value: m['id'],
                         groupValue: _selectedMethodId,
                         onChanged: (val) => setState(() => _selectedMethodId = val),
-                        title: Text('${m['brand']} **** ${m['last4']}', style: const TextStyle(color: ChaskiTheme.textPrimary)),
+                        title: Text(m['maskedLabel'] ?? '${m['brand'] ?? 'Tarjeta'} **** ${m['last4'] ?? ''}', style: const TextStyle(color: ChaskiTheme.textPrimary)),
                         activeColor: ChaskiTheme.primary,
                         contentPadding: EdgeInsets.zero,
                       );

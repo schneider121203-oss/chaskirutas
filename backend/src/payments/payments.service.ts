@@ -98,6 +98,44 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Webhook de Culqi (POST /payments/culqi-webhook).
+   * Culqi notifica el resultado final de un cargo. Actualizamos el pago local
+   * asociado a la transacción para reflejar el estado real (idempotente).
+   */
+  async handleCulqiWebhook(event: any) {
+    const object = event?.data ?? event?.object ?? event;
+    const chargeId = object?.id ?? event?.id;
+    const eventType: string = event?.type ?? object?.type ?? 'charge.updated';
+
+    if (!chargeId) {
+      // Aceptamos igual para que Culqi no reintente indefinidamente.
+      return { received: true, matched: false, reason: 'sin_charge_id' };
+    }
+
+    const payment = await this.paymentRepo.findOne({
+      where: { pspTransactionId: chargeId },
+    });
+    if (!payment) {
+      return { received: true, matched: false, chargeId };
+    }
+
+    // Mapear el tipo de evento de Culqi a nuestro estado interno.
+    if (eventType.includes('success') || eventType === 'charge.updated') {
+      payment.status = PaymentStatus.PAGADO;
+      if (!payment.paidAt) payment.paidAt = new Date();
+    } else if (eventType.includes('failed') || eventType.includes('expired')) {
+      payment.status = PaymentStatus.FALLIDO;
+    } else if (eventType.includes('refund')) {
+      payment.status = PaymentStatus.REEMBOLSADO;
+    }
+
+    payment.pspResponse = event;
+    await this.paymentRepo.save(payment);
+
+    return { received: true, matched: true, chargeId, status: payment.status };
+  }
+
   async getInvoice(bookingId: string) {
     const invoice = await this.invoiceRepo.findOne({
       where: { bookingId },

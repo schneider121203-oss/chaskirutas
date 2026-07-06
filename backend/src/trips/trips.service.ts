@@ -48,14 +48,18 @@ export class TripsService {
       dto.endLng,
     );
     const duration = this.pricingService.estimateDuration(distance);
-    const fare = this.pricingService.calculateFare(distance, duration);
+    const fare = this.pricingService.calculateFare(distance, duration, dto.category);
 
     return {
       distanceKm: distance,
       durationMinutes: duration,
+      category: dto.category ?? 'ESTANDAR',
       farePEN: fare.total,
       breakdown: {
         subtotal: fare.subtotal,
+        surgeMultiplier: fare.surgeMultiplier,
+        surgeReason: fare.surgeReason,
+        categoryMultiplier: fare.categoryMultiplier,
         platformFee: fare.platformFee,
       },
     };

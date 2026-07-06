@@ -64,36 +64,40 @@ export class CollectivesService {
     const route = await this.routeRepo.findOne({ where: { id: routeId } });
     if (!route) throw new NotFoundException('Colectivo no encontrado');
 
-    // 1. Verificación DNI via RENIEC
+    // 1. Verificación DNI via RENIEC (sin costo)
     const rVerification = await this.reniecService.verifyDni(dto.dni);
     if (!rVerification.success) {
       throw new BadRequestException('Error al verificar DNI del pasajero con RENIEC');
     }
 
-    // 2. Calcular depósito 30%
-    const depositAmount = Number((route.baseFarePen * 0.3).toFixed(2));
+    // 2. Buscar viaje interprovincial activo y VALIDAR disponibilidad
+    //    ANTES de cobrar (evita cobrar el depósito si el colectivo está lleno).
+    let trip = await this.tripRepo.findOne({
+      where: { routeId: route.id, status: TripStatus.RESERVADO },
+    });
+    if (trip && trip.seatsAvailable <= 0) {
+      throw new BadRequestException('El colectivo interprovincial se encuentra lleno');
+    }
 
-    // 3. Procesar depósito vía Culqi
+    // 3. Calcular y cobrar depósito 30% (ya confirmamos que hay asiento)
+    const depositAmount = Number((route.baseFarePen * 0.3).toFixed(2));
     const cPayment = await this.culqiService.processPayment(depositAmount, dto.paymentToken);
     if (!cPayment.success) {
       throw new BadRequestException('Error al realizar el depósito del 30% con la pasarela de pagos');
     }
 
-    // 4. Buscar o crear viaje interprovincial activo para esta ruta
-    let trip = await this.tripRepo.findOne({
-      where: { routeId: route.id, status: TripStatus.RESERVADO },
-    });
-
+    // 4. Confirmar el viaje: crear si no existía, o descontar el asiento.
+    //    Nota: para alta concurrencia real conviene envolver 3-4 en una
+    //    transacción con bloqueo pesimista del asiento.
     if (!trip) {
-      // Simulate/create a default trip to register bookings
-      // In prod, driver schedules this. For demo, we auto-create.
-      // Carlos Mendoza (+51987654321) as fallback driver.
+      // El conductor programa el viaje en producción. Para el demo se auto-crea.
+      // Carlos Mendoza (+51987654321) como conductor por defecto.
       const driver = await this.passengerRepo.manager.createQueryBuilder('User', 'u')
         .where('u.phone_e164 = :phone', { phone: '+51987654321' })
         .getRawOne();
 
       const driverId = driver ? driver.u_id : passengerId; // fallback
-      
+
       trip = this.tripRepo.create({
         routeId: route.id,
         vehicleId: '00000000-0000-0000-0000-000000000000', // Mock UUID
@@ -106,9 +110,6 @@ export class CollectivesService {
       });
       trip = await this.tripRepo.save(trip);
     } else {
-      if (trip.seatsAvailable <= 0) {
-        throw new BadRequestException('El colectivo interprovincial se encuentra lleno');
-      }
       trip.seatsAvailable -= 1;
       await this.tripRepo.save(trip);
     }

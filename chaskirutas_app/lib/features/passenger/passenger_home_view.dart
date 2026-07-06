@@ -5,6 +5,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../auth/auth_provider.dart';
 import '../../core/theme.dart';
+import '../../core/socket_service.dart';
+import '../payments/payment_checkout_view.dart';
+import '../trips/rating_view.dart';
 
 class PassengerHomeView extends ConsumerStatefulWidget {
   const PassengerHomeView({super.key});
@@ -34,6 +37,10 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
   String _matchStatus = 'Buscando ofertas...';
   Map<String, dynamic>? _matchedDriver;
   Timer? _tripStatusTimer;
+
+  // Matching en tiempo real (WebSocket)
+  final List<Map<String, dynamic>> _offers = [];
+  bool _socketReady = false;
 
   // Dynamic route selection variables
   List<dynamic> _routes = [];
@@ -72,6 +79,7 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
 
   @override
   void dispose() {
+    _disconnectSocket();
     _originController.dispose();
     _destController.dispose();
     _tripStatusTimer?.cancel();
@@ -212,8 +220,9 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
     
     setState(() {
       _isSearching = true;
-      _matchStatus = 'Buscando conductores activos...';
+      _matchStatus = 'Buscando conductores cercanos...';
       _matchedDriver = null;
+      _offers.clear();
     });
 
     final client = ref.read(apiClientProvider);
@@ -229,11 +238,14 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
 
       _bookingId = res.data['bookingId'];
       _tripId = res.data['trip']['id'];
-      
+
+      // Emitir la solicitud por WebSocket a los conductores en 5 km.
+      _emitRideRequestOverSocket();
+
       setState(() {
-        _matchStatus = 'Esperando a que un conductor acepte el viaje...';
+        _matchStatus = 'Esperando ofertas de conductores...';
       });
-      
+
       _startStatusPolling();
     } catch (e) {
       String msg = 'No hay conductores activos';
@@ -248,6 +260,193 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
         SnackBar(content: Text(msg), backgroundColor: Colors.red),
       );
     }
+  }
+
+  // ── Matching en tiempo real (WebSocket) ─────────────────────────────────────
+
+  void _emitRideRequestOverSocket() {
+    if (_tripId == null) return;
+    final profile = ref.read(authProvider).userProfile;
+    final passengerName = profile?['fullName']?.toString() ?? 'Pasajero';
+    final passengerId = profile?['id']?.toString();
+
+    final socket = ref.read(socketServiceProvider);
+    socket.connect();
+    _setupPassengerListeners(socket);
+    _socketReady = true;
+
+    socket.emit('passenger:request-ride', {
+      'tripId': _tripId,
+      'passengerId': passengerId,
+      'passengerName': passengerName,
+      'startLat': _myLocation.latitude,
+      'startLng': _myLocation.longitude,
+      'endLat': _destinationLatLng?.latitude,
+      'endLng': _destinationLatLng?.longitude,
+      'proposedFare': _proposedFare,
+    });
+  }
+
+  void _setupPassengerListeners(SocketService socket) {
+    socket.off('passenger:offer-received');
+    socket.off('passenger:driver-location');
+
+    socket.on('passenger:offer-received', (data) {
+      if (!mounted) return;
+      final offer = Map<String, dynamic>.from(data as Map);
+      setState(() {
+        // Reemplazar oferta previa del mismo conductor (dedupe).
+        _offers.removeWhere((o) => o['driverId'] == offer['driverId']);
+        _offers.add(offer);
+        if (_matchedDriver == null) {
+          _matchStatus = '${_offers.length} oferta(s) recibida(s). Elige una:';
+        }
+      });
+    });
+
+    socket.on('passenger:driver-location', (data) {
+      if (!mounted) return;
+      final m = data as Map;
+      final lat = double.tryParse(m['lat'].toString());
+      final lng = double.tryParse(m['lng'].toString());
+      if (lat != null && lng != null) _updateDriverMarker(lat, lng);
+    });
+  }
+
+  // El pasajero acepta una oferta específica de un conductor.
+  void _acceptOffer(Map<String, dynamic> offer) {
+    if (_tripId == null) return;
+    final socket = ref.read(socketServiceProvider);
+    socket.emit('passenger:accept-offer', {
+      'tripId': _tripId,
+      'driverId': offer['driverId'],
+      'offerFare': offer['offerFare'],
+    });
+    setState(() {
+      _proposedFare = double.tryParse(offer['offerFare'].toString()) ?? _proposedFare;
+      _matchedDriver = {
+        'id': offer['driverId'],
+        'fullName': offer['driverName'] ?? 'Conductor',
+        'rating': offer['rating'],
+        'vehicle': offer['vehicle'],
+      };
+      _matchStatus = '¡Oferta aceptada! El conductor viene en camino.';
+      _offers.clear();
+    });
+  }
+
+  void _updateDriverMarker(double lat, double lng) {
+    final pos = LatLng(lat, lng);
+    setState(() {
+      _markers.removeWhere((m) => m.markerId.value == 'driver');
+      _markers.add(
+        Marker(
+          markerId: const MarkerId('driver'),
+          position: pos,
+          infoWindow: const InfoWindow(title: 'Tu conductor'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        ),
+      );
+    });
+    _mapController?.animateCamera(CameraUpdate.newLatLng(pos));
+  }
+
+  void _disconnectSocket() {
+    if (_socketReady) {
+      final socket = ref.read(socketServiceProvider);
+      socket.off('passenger:offer-received');
+      socket.off('passenger:driver-location');
+      socket.disconnect();
+      _socketReady = false;
+    }
+  }
+
+  // Overlay de búsqueda: muestra ofertas mientras busca; al asignar conductor
+  // se convierte en un panel inferior para dejar ver el mapa con el GPS en vivo.
+  Widget _buildSearchOverlay() {
+    if (_matchedDriver != null) {
+      // Panel inferior — el mapa (con el marcador del conductor) queda visible.
+      return Positioned(
+        left: 16,
+        right: 16,
+        bottom: 24,
+        child: Card(
+          color: ChaskiTheme.cardColor,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_matchStatus, style: const TextStyle(color: ChaskiTheme.accent, fontWeight: FontWeight.bold)),
+                const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(backgroundColor: ChaskiTheme.primary, child: Icon(Icons.person, color: Colors.white)),
+                  title: Text(_matchedDriver!['fullName'] ?? 'Conductor'),
+                  subtitle: Text([
+                    if (_matchedDriver!['vehicle'] != null) _matchedDriver!['vehicle'],
+                    '⭐ ${(_matchedDriver!['rating'] as num?)?.toStringAsFixed(1) ?? '5.0'}',
+                  ].join(' · ')),
+                  trailing: Text('S/ ${_proposedFare.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: ChaskiTheme.primary)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Buscando / eligiendo oferta — overlay a pantalla completa.
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.85),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (_offers.isEmpty) const CircularProgressIndicator(color: ChaskiTheme.primary),
+            const SizedBox(height: 20),
+            Text(
+              _matchStatus,
+              style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            if (_offers.isNotEmpty)
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _offers.length,
+                  itemBuilder: (context, i) {
+                    final o = _offers[i];
+                    final fare = double.tryParse(o['offerFare'].toString()) ?? 0;
+                    return Card(
+                      color: ChaskiTheme.cardColor,
+                      child: ListTile(
+                        leading: const CircleAvatar(backgroundColor: ChaskiTheme.secondary, child: Icon(Icons.local_taxi, color: Colors.white)),
+                        title: Text(o['driverName'] ?? 'Conductor', style: const TextStyle(color: Colors.white)),
+                        subtitle: Text([
+                          if (o['vehicle'] != null && '${o['vehicle']}'.isNotEmpty) o['vehicle'],
+                          if (o['rating'] != null) '⭐ ${o['rating']}',
+                        ].join(' · '), style: const TextStyle(color: Colors.grey)),
+                        trailing: ElevatedButton(
+                          onPressed: () => _acceptOffer(o),
+                          child: Text('S/ ${fare.toStringAsFixed(2)}'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: _resetTripState,
+              child: const Text('Cancelar búsqueda', style: TextStyle(color: Colors.white70)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _startStatusPolling() {
@@ -310,21 +509,65 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              setState(() {
-                _isSearching = false;
-                _bookingId = null;
-                _tripId = null;
-                _matchedDriver = null;
-                _destinationLatLng = null;
-                _destController.clear();
-                _updateMarkers();
-              });
+              _resetTripState();
             },
-            child: const Text('Entendido'),
-          )
+            child: const Text('Cerrar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _payAndRate();
+            },
+            child: const Text('Pagar y calificar'),
+          ),
         ],
       ),
     );
+  }
+
+  // Encadena el pago del viaje (checkout con tarjeta Culqi) y la calificación del conductor.
+  Future<void> _payAndRate() async {
+    final bookingId = _bookingId;
+    if (bookingId == null) {
+      _resetTripState();
+      return;
+    }
+
+    // 1. Checkout de pago
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentCheckoutView(bookingId: bookingId, amount: _proposedFare),
+      ),
+    );
+    if (!mounted) return;
+
+    // 2. Calificación del conductor (por bookingId)
+    final driverName = _matchedDriver?['fullName'] as String? ?? 'Conductor';
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RatingView(bookingId: bookingId, targetName: '$driverName (Conductor)'),
+      ),
+    );
+    if (!mounted) return;
+
+    _resetTripState();
+  }
+
+  void _resetTripState() {
+    _disconnectSocket();
+    setState(() {
+      _isSearching = false;
+      _bookingId = null;
+      _tripId = null;
+      _matchedDriver = null;
+      _offers.clear();
+      _destinationLatLng = null;
+      _destController.clear();
+      _markers.removeWhere((m) => m.markerId.value == 'driver');
+      _updateMarkers();
+    });
   }
 
   @override
@@ -427,79 +670,7 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
                     ),
                   ),
                 ),
-              if (_isSearching)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black.withOpacity(0.8),
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(color: ChaskiTheme.primary),
-                        const SizedBox(height: 24),
-                        Text(
-                          _matchStatus,
-                          style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                        if (_matchedDriver != null) ...[
-                          const SizedBox(height: 24),
-                          Card(
-                            color: ChaskiTheme.cardColor,
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                children: [
-                                  ListTile(
-                                    leading: const CircleAvatar(
-                                      backgroundColor: ChaskiTheme.primary,
-                                      child: Icon(Icons.person, color: Colors.white),
-                                    ),
-                                    title: Text(_matchedDriver!['fullName'] ?? 'Conductor'),
-                                    subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('Calificación: ⭐ ${(_matchedDriver!['rating'] as num?)?.toStringAsFixed(1) ?? '5.0'}'),
-                                        if (_matchedDriver!['phone'] != null)
-                                          Text('Celular: ${_matchedDriver!['phone']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                      ],
-                                    ),
-                                  ),
-                                  const Divider(),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Precio: S/ ${_proposedFare.toStringAsFixed(2)}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: ChaskiTheme.primary.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: ChaskiTheme.primary),
-                                        ),
-                                        child: const Text(
-                                          'Asignado',
-                                          style: TextStyle(
-                                            color: ChaskiTheme.primary,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                ],
-                              ),
-                            ),
-                          )
-                        ]
-                      ],
-                    ),
-                  ),
-                ),
+              if (_isSearching) _buildSearchOverlay(),
             ],
           ),
         ),

@@ -1,13 +1,21 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { SanitizeInterceptor } from './common/interceptors/sanitize.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Prefix all REST endpoints
   app.setGlobalPrefix('api');
+
+  // Serializa entidades respetando @Exclude + limpia campos sensibles (hashes)
+  // de cualquier respuesta (a prueba de referencias circulares de TypeORM).
+  app.useGlobalInterceptors(
+    new ClassSerializerInterceptor(app.get(Reflector)),
+    new SanitizeInterceptor(),
+  );
 
   // Enable CORS
   app.enableCors({

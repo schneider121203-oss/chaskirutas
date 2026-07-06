@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../auth/auth_provider.dart';
 import '../../core/theme.dart';
+import '../../core/socket_service.dart';
+import 'declaration_view.dart';
 
 class DriverHomeView extends ConsumerStatefulWidget {
   const DriverHomeView({super.key});
@@ -25,6 +27,14 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
   Timer? _pollingTimer;
   Timer? _locationStreamTimer;
 
+  // Matching en tiempo real (WebSocket)
+  Map<String, dynamic>? _incomingRequest; // solicitud recibida por socket
+  bool _offerSubmitted = false;            // ya envié una oferta a esta solicitud
+  String? _myDriverId;
+  String _myDriverName = 'Conductor';
+  String? _myVehicleLabel;
+  bool _socketReady = false;
+
   // Form controllers
   final _dniInputController = TextEditingController();
   final _licenseInputController = TextEditingController();
@@ -41,6 +51,7 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
 
   @override
   void dispose() {
+    _disconnectSocket();
     _pollingTimer?.cancel();
     _locationStreamTimer?.cancel();
     _dniInputController.dispose();
@@ -59,14 +70,16 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
     final client = ref.read(apiClientProvider);
     try {
       final res = await client.dio.post('/drivers/me/toggle-online');
+      final goingOnline = !_isOnline;
       setState(() {
-        _isOnline = !_isOnline;
-        if (_isOnline) {
-          _startPollingRequests();
-        } else {
-          _stopPollingRequests();
-        }
+        _isOnline = goingOnline;
       });
+      if (goingOnline) {
+        await _connectSocketAndRegister();
+      } else {
+        _disconnectSocket();
+        _stopPollingRequests();
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -147,7 +160,124 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
     setState(() {
       _hasActiveTripRequest = false;
       _activeTripId = null;
+      _incomingRequest = null;
+      _offerSubmitted = false;
     });
+  }
+
+  // ── Matching en tiempo real (WebSocket) ─────────────────────────────────────
+
+  Future<void> _connectSocketAndRegister() async {
+    // Datos del conductor desde el perfil.
+    final profile = ref.read(authProvider).userProfile;
+    _myDriverId = profile?['id']?.toString();
+    _myDriverName = profile?['fullName']?.toString() ?? 'Conductor';
+    final v = profile?['driver']?['vehicle'];
+    if (v != null) _myVehicleLabel = '${v['brand'] ?? ''} ${v['model'] ?? ''}'.trim();
+
+    if (_myDriverId == null) return;
+
+    // Ubicación actual para el geofiltro de 5 km.
+    double lat = 0, lng = 0;
+    try {
+      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      lat = pos.latitude;
+      lng = pos.longitude;
+    } catch (_) {}
+
+    final socket = ref.read(socketServiceProvider);
+    socket.connect();
+    _setupDriverListeners(socket);
+    socket.emit('driver:register', {'driverId': _myDriverId, 'lat': lat, 'lng': lng});
+    _socketReady = true;
+  }
+
+  void _setupDriverListeners(SocketService socket) {
+    socket.off('driver:ride-request');
+    socket.off('driver:offer-accepted');
+    socket.off('driver:request-cancelled');
+
+    socket.on('driver:ride-request', (data) {
+      if (!mounted || !_isOnline) return;
+      // No interrumpir si ya está en un viaje activo.
+      if (_hasActiveTripRequest) return;
+      setState(() {
+        _incomingRequest = Map<String, dynamic>.from(data as Map);
+        _offerSubmitted = false;
+      });
+    });
+
+    socket.on('driver:offer-accepted', (data) {
+      if (!mounted) return;
+      final tripId = (data as Map)['tripId']?.toString();
+      final fare = data['offerFare'];
+      if (tripId != null) _onOfferAccepted(tripId, fare);
+    });
+
+    socket.on('driver:request-cancelled', (data) {
+      if (!mounted) return;
+      final tripId = (data as Map)['tripId']?.toString();
+      if (_incomingRequest != null && _incomingRequest!['tripId'] == tripId) {
+        setState(() {
+          _incomingRequest = null;
+          _offerSubmitted = false;
+        });
+      }
+    });
+  }
+
+  // El conductor envía una oferta/contraoferta con el incremento elegido.
+  void _submitOffer(double offerFare) {
+    final req = _incomingRequest;
+    if (req == null || _myDriverId == null) return;
+    final socket = ref.read(socketServiceProvider);
+    socket.emit('driver:submit-offer', {
+      'tripId': req['tripId'],
+      'driverId': _myDriverId,
+      'driverName': _myDriverName,
+      'vehicle': _myVehicleLabel,
+      'offerFare': offerFare,
+    });
+    setState(() => _offerSubmitted = true);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Oferta enviada: S/ ${offerFare.toStringAsFixed(2)}'), backgroundColor: ChaskiTheme.accent),
+      );
+    }
+  }
+
+  // El pasajero aceptó mi oferta → me auto-asigno el viaje y comienzo a moverme.
+  Future<void> _onOfferAccepted(String tripId, dynamic fare) async {
+    final client = ref.read(apiClientProvider);
+    try {
+      await client.dio.post('/trips/$tripId/accept');
+    } catch (_) {}
+    setState(() {
+      _incomingRequest = null;
+      _offerSubmitted = false;
+      _hasActiveTripRequest = true;
+      _activeTripId = tripId;
+      _activeTripStatus = 'EN_CAMINO';
+      if (fare != null) _passengerFare = double.tryParse(fare.toString()) ?? _passengerFare;
+    });
+    _startLocationStreaming();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Tu oferta fue aceptada! En camino a recoger al pasajero.'), backgroundColor: Colors.green),
+      );
+    }
+  }
+
+  void _disconnectSocket() {
+    if (_myDriverId != null && _socketReady) {
+      final socket = ref.read(socketServiceProvider);
+      socket.emit('driver:offline', {'driverId': _myDriverId});
+      socket.off('driver:ride-request');
+      socket.off('driver:offer-accepted');
+      socket.off('driver:request-cancelled');
+      socket.disconnect();
+    }
+    _socketReady = false;
   }
 
   void _startLocationStreaming() {
@@ -159,11 +289,24 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
       }
       try {
         final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        // 1. Persistir en BD (nombres de campo del StreamLocationDto).
         final client = ref.read(apiClientProvider);
         await client.dio.post('/trips/$_activeTripId/location', data: {
-          'lat': pos.latitude,
-          'lng': pos.longitude,
+          'latitude': pos.latitude,
+          'longitude': pos.longitude,
+          'speedKmh': pos.speed * 3.6,
+          'headingDeg': pos.heading.round(),
         });
+        // 2. Emitir en vivo al pasajero por socket para pintar el marcador.
+        if (_socketReady) {
+          ref.read(socketServiceProvider).emit('driver:location', {
+            'tripId': _activeTripId,
+            'lat': pos.latitude,
+            'lng': pos.longitude,
+            'heading': pos.heading,
+            'speedKmh': pos.speed * 3.6,
+          });
+        }
       } catch (e) {
         // Ignore location errors during stream to prevent spamming the driver
       }
@@ -344,25 +487,9 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
     setState(() => _isActionLoading = true);
     final client = ref.read(apiClientProvider);
     try {
-      // Find document list
-      final docRes = await client.dio.get('/drivers/me/documents');
-      final List docs = docRes.data;
-      
-      if (docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No tienes documentos para verificar'), backgroundColor: Colors.red),
-        );
-        setState(() => _isActionLoading = false);
-        return;
-      }
-
-      for (var doc in docs) {
-        if (!doc['isVerified']) {
-          await client.dio.patch('/admin/documents/${doc['id']}/verify', data: {
-            'isVerified': true,
-          });
-        }
-      }
+      // Atajo de desarrollo: el backend valida y activa (solo fuera de producción).
+      // En producción, la aprobación la realiza un ADMIN desde el panel web.
+      await client.dio.post('/drivers/me/dev-activate');
 
       await ref.read(authProvider.notifier).fetchProfile();
       setState(() => _isActionLoading = false);
@@ -538,16 +665,18 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
                             ),
                           ),
                         )
-                      : const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(color: ChaskiTheme.primary),
-                              SizedBox(height: 16),
-                              Text('Esperando solicitudes de pasajeros reales...', style: TextStyle(color: Colors.grey)),
-                            ],
-                          ),
-                        ))
+                      : (_incomingRequest != null
+                          ? _buildIncomingRequestCard()
+                          : const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(color: ChaskiTheme.primary),
+                                  SizedBox(height: 16),
+                                  Text('Esperando solicitudes de pasajeros cercanos...', style: TextStyle(color: Colors.grey)),
+                                ],
+                              ),
+                            )))
                   : const Center(
                       child: Text(
                         'Ponte Online para recibir solicitudes',
@@ -557,6 +686,87 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
             ),
           ]
         ],
+      ),
+    );
+  }
+
+  Widget _buildIncomingRequestCard() {
+    final req = _incomingRequest!;
+    final base = double.tryParse(req['proposedFare'].toString()) ?? 0;
+    final dist = req['distanceToPickupKm'];
+    final passengerName = req['passengerName'] ?? 'Pasajero';
+
+    Widget offerButton(String label, double factor, Color color) {
+      final fare = base * factor;
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: ElevatedButton(
+            onPressed: _offerSubmitted ? null : () => _submitOffer(double.parse(fare.toStringAsFixed(2))),
+            style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                Text('S/ ${fare.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.hail_rounded, color: ChaskiTheme.primary, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Nueva solicitud de $passengerName', style: Theme.of(context).textTheme.titleLarge)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (dist != null) Text('📍 A $dist km de tu ubicación', style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 8),
+              const Text('Tarifa propuesta por el pasajero:', style: TextStyle(fontSize: 14)),
+              Text('S/ ${base.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 26, color: ChaskiTheme.primary)),
+              const SizedBox(height: 20),
+              if (_offerSubmitted) ...[
+                const Center(child: Text('⏳ Esperando respuesta del pasajero...', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => setState(() { _incomingRequest = null; _offerSubmitted = false; }),
+                  child: const Text('Descartar solicitud'),
+                ),
+              ] else ...[
+                const Text('Acepta la tarifa o envía una contraoferta:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _submitOffer(double.parse(base.toStringAsFixed(2))),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+                    child: Text('Aceptar S/ ${base.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    offerButton('+10%', 1.10, ChaskiTheme.secondary),
+                    offerButton('+20%', 1.20, ChaskiTheme.warning),
+                    offerButton('+35%', 1.35, ChaskiTheme.danger),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -734,6 +944,20 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
               onPressed: _firmarContrato,
               icon: const Icon(Icons.draw_rounded),
               label: const Text('Firmar Contrato Digital de Afiliación'),
+            ),
+            const SizedBox(height: 12),
+            // Declaración Jurada TUC — OBLIGATORIA para formalizar.
+            ElevatedButton.icon(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DeclarationView()),
+                );
+                if (mounted) setState(() {});
+              },
+              icon: const Icon(Icons.assignment_rounded),
+              label: const Text('Llenar Declaración Jurada (TUC) *obligatoria'),
+              style: ElevatedButton.styleFrom(backgroundColor: ChaskiTheme.secondary, foregroundColor: Colors.white),
             ),
             const SizedBox(height: 24),
             const Divider(),

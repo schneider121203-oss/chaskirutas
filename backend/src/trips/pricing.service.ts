@@ -1,5 +1,12 @@
 import { Injectable } from '@nestjs/common';
 
+// Multiplicadores por categoría (Sección 4 de la especificación)
+export const CATEGORY_MULTIPLIER: Record<string, number> = {
+  ESTANDAR: 1.0,
+  CONFORT: 1.15,
+  XL: 1.6,
+};
+
 @Injectable()
 export class PricingService {
   calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -22,36 +29,56 @@ export class PricingService {
     return Math.round((distanceKm / 18) * 60);
   }
 
-  calculateFare(distanceKm: number, durationMin: number, date: Date = new Date()): {
+  calculateFare(
+    distanceKm: number,
+    durationMin: number,
+    category: string = 'ESTANDAR',
+    date: Date = new Date(),
+  ): {
     subtotal: number;
+    surgeMultiplier: number;
+    categoryMultiplier: number;
+    surgeReason: string;
     platformFee: number;
     total: number;
   } {
+    // Fórmula base: 1.5 + (km * 1.2) + (min * 0.12) + 0.8 (cargo de servicio)
     const base = 1.50;
     const perKm = distanceKm * 1.20;
     const perMin = durationMin * 0.12;
     const service = 0.80;
+    const subtotal = base + perKm + perMin + service;
 
-    let subtotal = base + perKm + perMin + service;
-    if (subtotal < 5.00) subtotal = 5.00;
-
+    // Surge pricing temporal
     const hour = date.getHours();
-    let multiplier = 1.0;
-
-    // Multiplier nocturno ×1.30 (22:00 — 06:00)
+    let surge = 1.0;
+    let surgeReason = 'NORMAL';
+    // Nocturno ×1.30 (22:00 — 06:00)
     if (hour >= 22 || hour < 6) {
-      multiplier = 1.30;
+      surge = 1.30;
+      surgeReason = 'NOCTURNO';
     }
-    // Multiplier hora punta ×1.20 (07:00-09:00 y 17:00-20:00)
+    // Hora punta ×1.20 (07:00-09:00 y 17:00-20:00)
     else if ((hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 20)) {
-      multiplier = 1.20;
+      surge = 1.20;
+      surgeReason = 'HORA_PUNTA';
     }
 
-    const total = Number((subtotal * multiplier).toFixed(2));
-    const platformFee = Number((total * 0.15).toFixed(2)); // 15% platform commission
+    // Multiplicador por categoría (Estándar 1.0 / Confort 1.15 / XL 1.6)
+    const categoryMultiplier = CATEGORY_MULTIPLIER[category] ?? 1.0;
+
+    // Suelo de tarifa: mínimo S/ 5.00 sobre el TOTAL final
+    let total = subtotal * surge * categoryMultiplier;
+    if (total < 5.00) total = 5.00;
+    total = Number(total.toFixed(2));
+
+    const platformFee = Number((total * 0.15).toFixed(2)); // 15% comisión plataforma
 
     return {
-      subtotal: total,
+      subtotal: Number(subtotal.toFixed(2)),
+      surgeMultiplier: surge,
+      categoryMultiplier,
+      surgeReason,
       platformFee,
       total,
     };

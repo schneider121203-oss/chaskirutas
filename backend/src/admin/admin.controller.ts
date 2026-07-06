@@ -36,14 +36,21 @@ export class AdminController {
   }
 
   @Patch('documents/:id/verify')
-  @Roles('ADMIN', 'CONDUCTOR')
-  @ApiOperation({ summary: 'Aprobar o rechazar un documento cargado (activa cuenta si DNI + Licencia están listos)' })
+  @Roles('ADMIN', 'OPERADOR')
+  @ApiOperation({ summary: 'Aprobar o rechazar un documento cargado (activa cuenta si TODOS los documentos están verificados)' })
   verifyDocument(
     @Param('id') id: string,
     @Body() dto: VerifyDocumentDto,
     @CurrentUser() user: any,
   ) {
     return this.adminService.verifyDocument(id, dto, user.sub);
+  }
+
+  @Patch('drivers/:id/approve-all')
+  @Roles('ADMIN', 'OPERADOR')
+  @ApiOperation({ summary: 'Aprobar TODOS los documentos del conductor y activar su cuenta' })
+  approveAllDocuments(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.adminService.approveAllDocuments(id, user.sub);
   }
 
   @Get('b2g/reports')

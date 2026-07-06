@@ -2,7 +2,7 @@ import { Controller, Get, Patch, Post, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { DriversService } from './drivers.service';
-import { UpdateDriverDto, CreateVehicleDto, UploadDocumentDto } from './dto';
+import { UpdateDriverDto, CreateVehicleDto, UploadDocumentDto, SubmitDeclarationDto } from './dto';
 import { CurrentUser, Roles } from '../common/decorators';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { RolesGuard } from '../common/guards';
@@ -61,5 +61,26 @@ export class DriversController {
   @ApiOperation({ summary: 'Conectarse / Desconectarse (Solo conductores formalizados y activos)' })
   toggleOnline(@CurrentUser() user: any) {
     return this.driversService.toggleOnline(user.sub);
+  }
+
+  @Post('me/dev-activate')
+  @Roles('CONDUCTOR')
+  @ApiOperation({ summary: '[DEV] Auto-activar cuenta simulando aprobación admin (deshabilitado en producción)' })
+  devActivate(@CurrentUser() user: any) {
+    return this.driversService.devActivate(user.sub);
+  }
+
+  @Get('me/declaration')
+  @Roles('CONDUCTOR')
+  @ApiOperation({ summary: 'Declaración Jurada TUC con datos autocompletados desde la cuenta' })
+  getDeclaration(@CurrentUser() user: any) {
+    return this.driversService.getDeclaration(user.sub);
+  }
+
+  @Post('me/declaration')
+  @Roles('CONDUCTOR')
+  @ApiOperation({ summary: 'Firmar la Declaración Jurada TUC (obligatoria para formalizar)' })
+  submitDeclaration(@CurrentUser() user: any, @Body() dto: SubmitDeclarationDto) {
+    return this.driversService.submitDeclaration(user.sub, dto);
   }
 }

@@ -4,10 +4,10 @@ import '../../core/theme.dart';
 import '../../core/api_client.dart';
 
 class RatingView extends ConsumerStatefulWidget {
-  final String tripId;
+  final String bookingId; // el backend califica por bookingId (POST /trips/:bookingId/rate)
   final String targetName; // e.g. "Juan (Conductor)"
 
-  const RatingView({super.key, required this.tripId, required this.targetName});
+  const RatingView({super.key, required this.bookingId, required this.targetName});
 
   @override
   ConsumerState<RatingView> createState() => _RatingViewState();
@@ -33,8 +33,8 @@ class _RatingViewState extends ConsumerState<RatingView> {
     setState(() => _isSubmitting = true);
     try {
       final client = ref.read(apiClientProvider);
-      await client.dio.post('/trips/${widget.tripId}/rate', data: {
-        'rating': _rating,
+      await client.dio.post('/trips/${widget.bookingId}/rate', data: {
+        'score': _rating,
         'comment': _commentController.text.trim(),
       });
 
