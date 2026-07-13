@@ -29,6 +29,9 @@ class SocketService {
           .setTransports(['websocket'])
           .enableReconnection()
           .disableAutoConnect()
+          // Evita la página de advertencia interstitial de Ngrok (plan gratuito)
+          // en el handshake del WebSocket.
+          .setExtraHeaders({'ngrok-skip-browser-warning': 'true'})
           .build(),
     );
     _socket!.connect();
