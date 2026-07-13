@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../auth/auth_provider.dart';
 import '../../core/theme.dart';
 import '../../core/socket_service.dart';
@@ -26,6 +27,15 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
   String _activeTripStatus = 'RESERVADO'; // RESERVADO, EN_CAMINO, EN_CURSO
   Timer? _pollingTimer;
   Timer? _locationStreamTimer;
+
+  // Mapa del viaje activo: posición propia en vivo + recorrido hasta el
+  // punto de recojo (EN_CAMINO) o hasta el destino final (EN_CURSO).
+  GoogleMapController? _mapController;
+  LatLng? _currentLatLng;
+  LatLng? _pickupLatLng;
+  LatLng? _destLatLng;
+  final Set<Marker> _mapMarkers = {};
+  final Set<Polyline> _mapPolylines = {};
 
   // Matching en tiempo real (WebSocket)
   Map<String, dynamic>? _incomingRequest; // solicitud recibida por socket
@@ -133,12 +143,15 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
               _activeTripId = trip['id'];
               _activeTripStatus = trip['status'];
               _passengerFare = double.parse(booking['farePen'].toString());
-              
+
               final double startLat = double.parse(trip['startedLat'].toString());
               final double startLng = double.parse(trip['startedLng'].toString());
               final double endLat = double.parse(trip['endedLat'].toString());
               final double endLng = double.parse(trip['endedLng'].toString());
               _passengerRoute = 'De (${startLat.toStringAsFixed(4)}, ${startLng.toStringAsFixed(4)}) a (${endLat.toStringAsFixed(4)}, ${endLng.toStringAsFixed(4)})';
+              _pickupLatLng = LatLng(startLat, startLng);
+              _destLatLng = LatLng(endLat, endLng);
+              _updateDriverMapOverlays();
             });
           }
         } else {
@@ -162,7 +175,73 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
       _activeTripId = null;
       _incomingRequest = null;
       _offerSubmitted = false;
+      _pickupLatLng = null;
+      _destLatLng = null;
+      _mapMarkers.clear();
+      _mapPolylines.clear();
     });
+  }
+
+  // Reconstruye marcadores y el trazado del recorrido según la fase del viaje:
+  // hacia el punto de recojo mientras va EN_CAMINO, hacia el destino final una
+  // vez que el viaje se inicia (EN_CURSO).
+  void _updateDriverMapOverlays() {
+    _mapMarkers.clear();
+    if (_currentLatLng != null) {
+      _mapMarkers.add(
+        Marker(
+          markerId: const MarkerId('me'),
+          position: _currentLatLng!,
+          infoWindow: const InfoWindow(title: 'Tú'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        ),
+      );
+    }
+    if (_activeTripStatus == 'EN_CAMINO' && _pickupLatLng != null) {
+      _mapMarkers.add(
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: _pickupLatLng!,
+          infoWindow: const InfoWindow(title: 'Recoger pasajero'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+        ),
+      );
+    }
+    if (_destLatLng != null) {
+      _mapMarkers.add(
+        Marker(
+          markerId: const MarkerId('destination'),
+          position: _destLatLng!,
+          infoWindow: const InfoWindow(title: 'Destino final'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+    }
+
+    _mapPolylines.clear();
+    final start = _currentLatLng;
+    if (start != null) {
+      if (_activeTripStatus == 'EN_CAMINO' && _pickupLatLng != null) {
+        _mapPolylines.add(
+          Polyline(
+            polylineId: const PolylineId('route'),
+            points: [start, _pickupLatLng!],
+            color: ChaskiTheme.secondary,
+            width: 4,
+            patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+          ),
+        );
+      } else if (_activeTripStatus == 'EN_CURSO' && _destLatLng != null) {
+        _mapPolylines.add(
+          Polyline(
+            polylineId: const PolylineId('route'),
+            points: [start, _destLatLng!],
+            color: ChaskiTheme.primary,
+            width: 4,
+          ),
+        );
+      }
+    }
   }
 
   // ── Matching en tiempo real (WebSocket) ─────────────────────────────────────
@@ -201,9 +280,16 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
       if (!mounted || !_isOnline) return;
       // No interrumpir si ya está en un viaje activo.
       if (_hasActiveTripRequest) return;
+      final req = Map<String, dynamic>.from(data as Map);
       setState(() {
-        _incomingRequest = Map<String, dynamic>.from(data as Map);
+        _incomingRequest = req;
         _offerSubmitted = false;
+        final startLat = double.tryParse(req['startLat'].toString());
+        final startLng = double.tryParse(req['startLng'].toString());
+        final endLat = double.tryParse(req['endLat']?.toString() ?? '');
+        final endLng = double.tryParse(req['endLng']?.toString() ?? '');
+        _pickupLatLng = (startLat != null && startLng != null) ? LatLng(startLat, startLng) : null;
+        _destLatLng = (endLat != null && endLng != null) ? LatLng(endLat, endLng) : null;
       });
     });
 
@@ -282,35 +368,47 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
 
   void _startLocationStreaming() {
     _locationStreamTimer?.cancel();
+    _streamAndSendLocation(); // Primer fix inmediato, para que el mapa no arranque vacío.
     _locationStreamTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       if (!mounted || _activeTripId == null || (_activeTripStatus != 'EN_CAMINO' && _activeTripStatus != 'EN_CURSO')) {
         timer.cancel();
         return;
       }
-      try {
-        final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-        // 1. Persistir en BD (nombres de campo del StreamLocationDto).
-        final client = ref.read(apiClientProvider);
-        await client.dio.post('/trips/$_activeTripId/location', data: {
-          'latitude': pos.latitude,
-          'longitude': pos.longitude,
-          'speedKmh': pos.speed * 3.6,
-          'headingDeg': pos.heading.round(),
-        });
-        // 2. Emitir en vivo al pasajero por socket para pintar el marcador.
-        if (_socketReady) {
-          ref.read(socketServiceProvider).emit('driver:location', {
-            'tripId': _activeTripId,
-            'lat': pos.latitude,
-            'lng': pos.longitude,
-            'heading': pos.heading,
-            'speedKmh': pos.speed * 3.6,
-          });
-        }
-      } catch (e) {
-        // Ignore location errors during stream to prevent spamming the driver
-      }
+      _streamAndSendLocation();
     });
+  }
+
+  Future<void> _streamAndSendLocation() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      if (mounted) {
+        setState(() {
+          _currentLatLng = LatLng(pos.latitude, pos.longitude);
+          _updateDriverMapOverlays();
+        });
+        _mapController?.animateCamera(CameraUpdate.newLatLng(_currentLatLng!));
+      }
+      // 1. Persistir en BD (nombres de campo del StreamLocationDto).
+      final client = ref.read(apiClientProvider);
+      await client.dio.post('/trips/$_activeTripId/location', data: {
+        'latitude': pos.latitude,
+        'longitude': pos.longitude,
+        'speedKmh': pos.speed * 3.6,
+        'headingDeg': pos.heading.round(),
+      });
+      // 2. Emitir en vivo al pasajero por socket para pintar el marcador.
+      if (_socketReady) {
+        ref.read(socketServiceProvider).emit('driver:location', {
+          'tripId': _activeTripId,
+          'lat': pos.latitude,
+          'lng': pos.longitude,
+          'heading': pos.heading,
+          'speedKmh': pos.speed * 3.6,
+        });
+      }
+    } catch (e) {
+      // Ignore location errors during stream to prevent spamming the driver
+    }
   }
 
   void _updateTripStatus(String newStatus) async {
@@ -334,9 +432,15 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
         if (newStatus == 'COMPLETADO') {
           _hasActiveTripRequest = false;
           _activeTripId = null;
+          _pickupLatLng = null;
+          _destLatLng = null;
+          _mapMarkers.clear();
+          _mapPolylines.clear();
           _locationStreamTimer?.cancel();
           // Restart polling for next requests
           _startPollingRequests();
+        } else {
+          _updateDriverMapOverlays();
         }
       });
 
@@ -612,58 +716,87 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
             Expanded(
               child: _isOnline
                   ? (_hasActiveTripRequest
-                      ? Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.hail_rounded, color: ChaskiTheme.primary, size: 28),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      _activeTripStatus == 'RESERVADO'
-                                          ? 'Solicitud Recibida'
-                                          : (_activeTripStatus == 'EN_CAMINO' ? 'Viaje Aceptado' : 'Viaje en Curso'),
-                                      style: Theme.of(context).textTheme.titleLarge,
-                                    ),
-                                  ],
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: SizedBox(
+                                height: 220,
+                                child: GoogleMap(
+                                  initialCameraPosition: CameraPosition(
+                                    target: _currentLatLng ?? _pickupLatLng ?? const LatLng(-12.046374, -77.042793),
+                                    zoom: 14.0,
+                                  ),
+                                  onMapCreated: (controller) => _mapController = controller,
+                                  markers: _mapMarkers,
+                                  polylines: _mapPolylines,
+                                  myLocationEnabled: true,
+                                  myLocationButtonEnabled: false,
+                                  zoomControlsEnabled: false,
+                                  mapToolbarEnabled: false,
                                 ),
-                                const SizedBox(height: 16),
-                                Text('Ruta: $_passengerRoute', style: const TextStyle(fontSize: 16)),
-                                Text('Tarifa: S/ ${_passengerFare.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: ChaskiTheme.primary)),
-                                const SizedBox(height: 24),
-                                if (_activeTripStatus == 'RESERVADO') ...[
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: ElevatedButton(
-                                          onPressed: () => _updateTripStatus('EN_CAMINO'),
-                                          child: const Text('Aceptar Viaje'),
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                ] else if (_activeTripStatus == 'EN_CAMINO') ...[
-                                  ElevatedButton.icon(
-                                    onPressed: () => _updateTripStatus('EN_CURSO'),
-                                    icon: const Icon(Icons.play_arrow_rounded),
-                                    label: const Text('Iniciar Viaje (Pasajero abordo)'),
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
-                                  )
-                                ] else if (_activeTripStatus == 'EN_CURSO') ...[
-                                  ElevatedButton.icon(
-                                    onPressed: () => _updateTripStatus('COMPLETADO'),
-                                    icon: const Icon(Icons.check_circle_rounded),
-                                    label: const Text('Completar Viaje (Llegada a destino)'),
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                  )
-                                ]
-                              ],
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 16),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                child: Card(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(20.0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.hail_rounded, color: ChaskiTheme.primary, size: 28),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              _activeTripStatus == 'RESERVADO'
+                                                  ? 'Solicitud Recibida'
+                                                  : (_activeTripStatus == 'EN_CAMINO' ? 'Viaje Aceptado' : 'Viaje en Curso'),
+                                              style: Theme.of(context).textTheme.titleLarge,
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text('Ruta: $_passengerRoute', style: const TextStyle(fontSize: 16)),
+                                        Text('Tarifa: S/ ${_passengerFare.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: ChaskiTheme.primary)),
+                                        const SizedBox(height: 24),
+                                        if (_activeTripStatus == 'RESERVADO') ...[
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  onPressed: () => _updateTripStatus('EN_CAMINO'),
+                                                  child: const Text('Aceptar Viaje'),
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        ] else if (_activeTripStatus == 'EN_CAMINO') ...[
+                                          ElevatedButton.icon(
+                                            onPressed: () => _updateTripStatus('EN_CURSO'),
+                                            icon: const Icon(Icons.play_arrow_rounded),
+                                            label: const Text('Iniciar Viaje (Pasajero abordo)'),
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+                                          )
+                                        ] else if (_activeTripStatus == 'EN_CURSO') ...[
+                                          ElevatedButton.icon(
+                                            onPressed: () => _updateTripStatus('COMPLETADO'),
+                                            icon: const Icon(Icons.check_circle_rounded),
+                                            label: const Text('Completar Viaje (Llegada a destino)'),
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                                          )
+                                        ]
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         )
                       : (_incomingRequest != null
                           ? _buildIncomingRequestCard()

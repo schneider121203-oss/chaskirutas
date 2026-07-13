@@ -23,7 +23,10 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
   GoogleMapController? _mapController;
   LatLng _myLocation = const LatLng(-12.046374, -77.042793); // Centro de Lima
   LatLng? _destinationLatLng;
+  LatLng? _driverLatLng;
   final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
+  String? _tripStatus;
 
   bool _isEstimating = false;
   double _distanceKm = 0;
@@ -338,6 +341,7 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
   void _updateDriverMarker(double lat, double lng) {
     final pos = LatLng(lat, lng);
     setState(() {
+      _driverLatLng = pos;
       _markers.removeWhere((m) => m.markerId.value == 'driver');
       _markers.add(
         Marker(
@@ -347,8 +351,26 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         ),
       );
+      _updateRoutePolyline();
     });
     _mapController?.animateCamera(CameraUpdate.newLatLng(pos));
+  }
+
+  // Traza el recorrido en vivo: una vez que el viaje se inicia (EN_CURSO), dibuja
+  // la línea desde la posición actual del conductor hasta el destino final.
+  void _updateRoutePolyline() {
+    _polylines.removeWhere((p) => p.polylineId.value == 'route');
+    if (_tripStatus == 'EN_CURSO' && _destinationLatLng != null) {
+      _polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: [_driverLatLng ?? _myLocation, _destinationLatLng!],
+          color: ChaskiTheme.primary,
+          width: 4,
+          patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+        ),
+      );
+    }
   }
 
   void _disconnectSocket() {
@@ -463,6 +485,7 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
         final driver = res.data['driver'];
         
         setState(() {
+          _tripStatus = status;
           if (status == 'RESERVADO') {
             _matchStatus = 'Esperando a que el conductor acepte el viaje...';
           } else if (status == 'EN_CAMINO') {
@@ -481,6 +504,7 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
             timer.cancel();
             _showTripCompletedDialog();
           }
+          _updateRoutePolyline();
         });
       } catch (_) {}
     });
@@ -561,11 +585,14 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
       _isSearching = false;
       _bookingId = null;
       _tripId = null;
+      _tripStatus = null;
+      _driverLatLng = null;
       _matchedDriver = null;
       _offers.clear();
       _destinationLatLng = null;
       _destController.clear();
       _markers.removeWhere((m) => m.markerId.value == 'driver');
+      _polylines.clear();
       _updateMarkers();
     });
   }
@@ -588,6 +615,7 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
                   _determinePosition();
                 },
                 markers: _markers,
+                polylines: _polylines,
                 onTap: _onMapTapped,
                 myLocationEnabled: true,
                 myLocationButtonEnabled: false,
