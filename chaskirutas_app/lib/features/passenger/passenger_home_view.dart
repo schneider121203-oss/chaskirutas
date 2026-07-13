@@ -17,6 +17,13 @@ class PassengerHomeView extends ConsumerStatefulWidget {
 }
 
 class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
+  // Paleta clara del bottom sheet (independiente del tema oscuro global de la
+  // app): fondo blanco/gris muy claro con texto oscuro, según especificación.
+  static const Color _sheetBg = Colors.white;
+  static const Color _sheetBgAlt = Color(0xFFF8F9FA);
+  static const Color _sheetTextPrimary = Color(0xFF111827);
+  static const Color _sheetTextSecondary = Color(0xFF6B7280);
+
   final _originController = TextEditingController(text: 'Mi ubicación actual');
   final _destController = TextEditingController();
   
@@ -383,91 +390,191 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
     }
   }
 
-  // Overlay de búsqueda: muestra ofertas mientras busca; al asignar conductor
-  // se convierte en un panel inferior para dejar ver el mapa con el GPS en vivo.
-  Widget _buildSearchOverlay() {
-    if (_matchedDriver != null) {
-      // Panel inferior — el mapa (con el marcador del conductor) queda visible.
-      return Positioned(
-        left: 16,
-        right: 16,
-        bottom: 24,
-        child: Card(
-          color: ChaskiTheme.cardColor,
+  // Envoltorio común del bottom sheet: fondo claro, esquinas superiores
+  // redondeadas, sombra flotante y altura máxima de 35% de la pantalla para
+  // que el mapa quede siempre visible detrás.
+  Widget _bottomSheetShell(Widget child) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.35;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: _sheetBg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [
+            BoxShadow(color: Colors.black26, blurRadius: 24, offset: Offset(0, -6)),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(_matchStatus, style: const TextStyle(color: ChaskiTheme.accent, fontWeight: FontWeight.bold)),
-                const Divider(),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(backgroundColor: ChaskiTheme.primary, child: Icon(Icons.person, color: Colors.white)),
-                  title: Text(_matchedDriver!['fullName'] ?? 'Conductor'),
-                  subtitle: Text([
-                    if (_matchedDriver!['vehicle'] != null) _matchedDriver!['vehicle'],
-                    '⭐ ${(_matchedDriver!['rating'] as num?)?.toStringAsFixed(1) ?? '5.0'}',
-                  ].join(' · ')),
-                  trailing: Text('S/ ${_proposedFare.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: ChaskiTheme.primary)),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5E7EB),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
+                Flexible(child: SingleChildScrollView(child: child)),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // Contenido del sheet mientras se buscan ofertas o ya hay conductor asignado.
+  Widget _buildSearchSheetContent() {
+    if (_matchedDriver != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_matchStatus, style: const TextStyle(color: ChaskiTheme.accent, fontWeight: FontWeight.bold, fontSize: 14)),
+          const Divider(color: Color(0xFFE5E7EB)),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const CircleAvatar(backgroundColor: ChaskiTheme.primary, child: Icon(Icons.person, color: Colors.white)),
+            title: Text(_matchedDriver!['fullName'] ?? 'Conductor', style: const TextStyle(color: _sheetTextPrimary, fontWeight: FontWeight.w600)),
+            subtitle: Text([
+              if (_matchedDriver!['vehicle'] != null) _matchedDriver!['vehicle'],
+              '⭐ ${(_matchedDriver!['rating'] as num?)?.toStringAsFixed(1) ?? '5.0'}',
+            ].join(' · '), style: const TextStyle(color: _sheetTextSecondary)),
+            trailing: Text('S/ ${_proposedFare.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: ChaskiTheme.primary)),
+          ),
+        ],
       );
     }
 
-    // Buscando / eligiendo oferta — overlay a pantalla completa.
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.85),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
           children: [
-            if (_offers.isEmpty) const CircularProgressIndicator(color: ChaskiTheme.primary),
-            const SizedBox(height: 20),
-            Text(
-              _matchStatus,
-              style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            if (_offers.isNotEmpty)
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _offers.length,
-                  itemBuilder: (context, i) {
-                    final o = _offers[i];
-                    final fare = double.tryParse(o['offerFare'].toString()) ?? 0;
-                    return Card(
-                      color: ChaskiTheme.cardColor,
-                      child: ListTile(
-                        leading: const CircleAvatar(backgroundColor: ChaskiTheme.secondary, child: Icon(Icons.local_taxi, color: Colors.white)),
-                        title: Text(o['driverName'] ?? 'Conductor', style: const TextStyle(color: Colors.white)),
-                        subtitle: Text([
-                          if (o['vehicle'] != null && '${o['vehicle']}'.isNotEmpty) o['vehicle'],
-                          if (o['rating'] != null) '⭐ ${o['rating']}',
-                        ].join(' · '), style: const TextStyle(color: Colors.grey)),
-                        trailing: ElevatedButton(
-                          onPressed: () => _acceptOffer(o),
-                          child: Text('S/ ${fare.toStringAsFixed(2)}'),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+            if (_offers.isEmpty) ...[
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: ChaskiTheme.primary),
               ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: _resetTripState,
-              child: const Text('Cancelar búsqueda', style: TextStyle(color: Colors.white70)),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Text(
+                _matchStatus,
+                style: const TextStyle(fontSize: 14, color: _sheetTextPrimary, fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         ),
-      ),
+        if (_offers.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 160),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _offers.length,
+              itemBuilder: (context, i) {
+                final o = _offers[i];
+                final fare = double.tryParse(o['offerFare'].toString()) ?? 0;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(color: _sheetBgAlt, borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    children: [
+                      const CircleAvatar(backgroundColor: ChaskiTheme.secondary, radius: 18, child: Icon(Icons.local_taxi, color: Colors.white, size: 18)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(o['driverName'] ?? 'Conductor', style: const TextStyle(color: _sheetTextPrimary, fontWeight: FontWeight.w600)),
+                            Text([
+                              if (o['vehicle'] != null && '${o['vehicle']}'.isNotEmpty) o['vehicle'],
+                              if (o['rating'] != null) '⭐ ${o['rating']}',
+                            ].join(' · '), style: const TextStyle(color: _sheetTextSecondary, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _acceptOffer(o),
+                        child: Text('S/ ${fare.toStringAsFixed(2)}'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: _resetTripState,
+          child: const Text('Cancelar búsqueda', style: TextStyle(color: _sheetTextSecondary)),
+        ),
+      ],
+    );
+  }
+
+  // Contenido del sheet con la estimación de tarifa y el botón de solicitud.
+  Widget _buildFareSheetContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Distancia: ${_distanceKm.toStringAsFixed(1)} km', style: const TextStyle(fontSize: 15, color: _sheetTextPrimary, fontWeight: FontWeight.w600)),
+            Text('Tiempo: $_durationMin mins', style: const TextStyle(fontSize: 15, color: _sheetTextPrimary, fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 14),
+        const Text('Tarifa sugerida:', style: TextStyle(color: _sheetTextSecondary, fontSize: 13)),
+        Text(
+          'S/ ${_farePen.toStringAsFixed(2)}',
+          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: ChaskiTheme.primary),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton.filled(
+              onPressed: () {
+                if (_proposedFare > 5) setState(() => _proposedFare -= 1.0);
+              },
+              icon: const Icon(Icons.remove),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              'S/ ${_proposedFare.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _sheetTextPrimary),
+            ),
+            const SizedBox(width: 16),
+            IconButton.filled(
+              onPressed: () => setState(() => _proposedFare += 1.0),
+              icon: const Icon(Icons.add),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: _requestRide,
+          child: const Text('Solicitar Viaje'),
+        ),
+      ],
     );
   }
 
@@ -599,163 +706,122 @@ class _PassengerHomeViewState extends ConsumerState<PassengerHomeView> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    // El mapa ocupa el 100% de la pantalla; toda la demás UI flota encima en
+    // un Stack, en vez de compartir el espacio en una Column (que antes
+    // encogía el mapa cada vez que aparecía el panel inferior).
+    return Stack(
       children: [
-        // Mapa interactivo real de Google
-        Expanded(
-          child: Stack(
-            children: [
-              GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: _myLocation,
-                  zoom: 14.0,
-                ),
-                onMapCreated: (controller) {
-                  _mapController = controller;
-                  _determinePosition();
-                },
-                markers: _markers,
-                polylines: _polylines,
-                onTap: _onMapTapped,
-                myLocationEnabled: true,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-                mapToolbarEnabled: false,
-              ),
-              Positioned(
-                top: 24,
-                left: 24,
-                right: 24,
-                child: Container(
-                  decoration: ChaskiTheme.glassDecoration,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      if (_isLoadingRoutes) ...[
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8.0),
-                          child: LinearProgressIndicator(color: ChaskiTheme.primary),
-                        ),
-                      ] else if (_routes.isNotEmpty) ...[
-                        DropdownButtonFormField<dynamic>(
-                          value: _selectedRoute,
-                          dropdownColor: ChaskiTheme.cardColor,
-                          decoration: const InputDecoration(
-                            labelText: 'Ruta de Taxi',
-                            prefixIcon: Icon(Icons.map_rounded, color: ChaskiTheme.primary),
-                          ),
-                          items: _routes.map((route) {
-                            return DropdownMenuItem<dynamic>(
-                              value: route,
-                              child: Text(
-                                route['name'] ?? '',
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              _selectRoute(val);
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      TextField(
-                        controller: _originController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          hintText: 'Origen',
-                          prefixIcon: Icon(Icons.my_location_rounded, color: Colors.amber),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _destController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          hintText: 'Toca el mapa para fijar destino',
-                          prefixIcon: Icon(Icons.location_on_rounded, color: Colors.red),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (_isEstimating)
-                const Center(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(strokeWidth: 3),
-                          SizedBox(width: 16),
-                          Text('Calculando ruta y tarifa...'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              if (_isSearching) _buildSearchOverlay(),
-            ],
+        Positioned.fill(
+          child: GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _myLocation,
+              zoom: 14.0,
+            ),
+            onMapCreated: (controller) {
+              _mapController = controller;
+              _determinePosition();
+            },
+            markers: _markers,
+            polylines: _polylines,
+            onTap: _onMapTapped,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
           ),
         ),
-        // Panel de estimación y propuesta de tarifa
-        if (_farePen > 0 && !_isSearching)
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              color: ChaskiTheme.cardColor,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-            ),
+        Positioned(
+          top: 24,
+          left: 24,
+          right: 24,
+          child: Container(
+            decoration: ChaskiTheme.glassDecoration,
+            padding: const EdgeInsets.all(16),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Distancia: ${_distanceKm.toStringAsFixed(1)} km', style: const TextStyle(fontSize: 16)),
-                    Text('Tiempo: $_durationMin mins', style: const TextStyle(fontSize: 16)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Text('Tarifa sugerida:', style: TextStyle(color: Colors.grey)),
-                Text(
-                  'S/ ${_farePen.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: ChaskiTheme.primary),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton.filled(
-                      onPressed: () {
-                        if (_proposedFare > 5) setState(() => _proposedFare -= 1.0);
-                      },
-                      icon: const Icon(Icons.remove),
+                if (_isLoadingRoutes) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: LinearProgressIndicator(color: ChaskiTheme.primary),
+                  ),
+                ] else if (_routes.isNotEmpty) ...[
+                  DropdownButtonFormField<dynamic>(
+                    value: _selectedRoute,
+                    dropdownColor: ChaskiTheme.cardColor,
+                    decoration: const InputDecoration(
+                      labelText: 'Ruta de Taxi',
+                      prefixIcon: Icon(Icons.map_rounded, color: ChaskiTheme.primary),
                     ),
-                    const SizedBox(width: 16),
-                    Text(
-                      'S/ ${_proposedFare.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton.filled(
-                      onPressed: () => setState(() => _proposedFare += 1.0),
-                      icon: const Icon(Icons.add),
-                    ),
-                  ],
+                    items: _routes.map((route) {
+                      return DropdownMenuItem<dynamic>(
+                        value: route,
+                        child: Text(
+                          route['name'] ?? '',
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        _selectRoute(val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: _originController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Origen',
+                    prefixIcon: Icon(Icons.my_location_rounded, color: Colors.amber),
+                  ),
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _requestRide,
-                  child: const Text('Solicitar Viaje'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _destController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Toca el mapa para fijar destino',
+                    prefixIcon: Icon(Icons.location_on_rounded, color: Colors.red),
+                  ),
                 ),
               ],
             ),
+          ),
+        ),
+        if (_isEstimating)
+          const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(strokeWidth: 3),
+                    SizedBox(width: 16),
+                    Text('Calculando ruta y tarifa...'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        // Bottom sheet claro: nunca cubre más del 35% de la pantalla, el mapa
+        // permanece visible en todo momento detrás.
+        if (_isSearching)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _bottomSheetShell(_buildSearchSheetContent()),
           )
+        else if (_farePen > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _bottomSheetShell(_buildFareSheetContent()),
+          ),
       ],
     );
   }
