@@ -11,12 +11,12 @@ class ApiClient {
 
   // ── Configuración de entorno del backend ──────────────────────────────────
   // Cambia SOLO esta línea para elegir contra qué backend habla la app.
-  static const BackendEnv activeEnv = BackendEnv.ngrok;
+  static const BackendEnv activeEnv = BackendEnv.local;
 
   // Pega aquí la URL https que te imprime Ngrok al correrlo (ver README /
   // instrucciones de terminal), terminada en `/api`, y cambia `activeEnv`
   // arriba a `BackendEnv.ngrok`. Ejemplo: 'https://abcd-1-2-3-4.ngrok-free.app/api'
-  static const String ngrokBaseUrl = 'https://unlocked-scavenger-mace.ngrok-free.dev/api';
+  static const String ngrokBaseUrl = 'https://TU-URL-DE-NGROK.ngrok-free.app/api';
 
   static const String awsBaseUrl = 'http://100.28.130.167:3000/api';
 
@@ -28,10 +28,7 @@ class ApiClient {
       case BackendEnv.aws:
         return awsBaseUrl;
       case BackendEnv.local:
-        // En web, la app y la API se sirven desde el mismo origen (ver
-        // ServeStaticModule en el backend), tanto en localhost como detrás
-        // de un túnel de Ngrok.
-        if (kIsWeb) return '${Uri.base.origin}/api';
+        if (kIsWeb) return 'http://localhost:3000/api';
         if (defaultTargetPlatform == TargetPlatform.android) {
           return 'http://10.0.2.2:3000/api'; // Android Emulator loopback to host
         }

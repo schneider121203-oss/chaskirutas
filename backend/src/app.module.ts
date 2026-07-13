@@ -1,9 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
-import { join } from 'path';
 import { LoggerMiddleware } from './logger.middleware';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ServeStaticModule } from '@nestjs/serve-static';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
@@ -16,14 +14,6 @@ import { IntegrationsModule } from './integrations/integrations.module';
 
 @Module({
   imports: [
-    // Sirve la app Flutter web (backend/public) en '/', dejando '/api/*' libre
-    // para el REST/Swagger. Debe ir primero para que su orden de resolución
-    // de rutas no compita con el prefijo global 'api'.
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'public'),
-      exclude: ['/api/{*path}'],
-    }),
-
     // Global Config Module loading env vars
     ConfigModule.forRoot({
       isGlobal: true,
