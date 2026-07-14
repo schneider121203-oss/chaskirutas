@@ -38,6 +38,22 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     super.dispose();
   }
 
+  Future<void> _pickLicenseDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year + 2, now.month, now.day),
+      firstDate: now,
+      lastDate: DateTime(now.year + 15),
+      helpText: 'Vencimiento de la licencia',
+    );
+    if (picked != null) {
+      final m = picked.month.toString().padLeft(2, '0');
+      final d = picked.day.toString().padLeft(2, '0');
+      _licenseExpiresController.text = '${picked.year}-$m-$d'; // formato AAAA-MM-DD
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -309,9 +325,12 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _licenseExpiresController,
+                      readOnly: true,
+                      onTap: _pickLicenseDate,
                       decoration: const InputDecoration(
                         labelText: 'Fecha de Expiración',
-                        hintText: 'YYYY-MM-DD',
+                        hintText: 'Toca para elegir la fecha',
+                        suffixIcon: Icon(Icons.calendar_today_rounded, color: ChaskiTheme.textSecondary),
                       ),
                       validator: (val) => _selectedRole == 'CONDUCTOR' && (val == null || val.isEmpty)
                           ? 'Requerido para conductor'

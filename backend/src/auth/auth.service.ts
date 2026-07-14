@@ -36,43 +36,47 @@ export class AuthService {
       throw new ConflictException('Ya existe un usuario con ese teléfono o DNI');
     }
 
+    // Validar datos de conductor ANTES de tocar la BD (evita estado parcial).
+    let licenseExpiresAt: Date | undefined;
+    if (dto.role === 'CONDUCTOR') {
+      if (!dto.licenseNumber || !dto.licenseClass || !dto.licenseExpiresAt) {
+        throw new BadRequestException('Conductor requiere número, clase y fecha de expiración de licencia.');
+      }
+      licenseExpiresAt = new Date(dto.licenseExpiresAt);
+      if (Number.isNaN(licenseExpiresAt.getTime())) {
+        throw new BadRequestException('La fecha de expiración de la licencia es inválida (usa el formato AAAA-MM-DD).');
+      }
+    }
+
     // Hash de la contraseña
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    // Crear usuario
-    const user = this.userRepo.create({
-      phoneE164: dto.phone,
-      passwordHash,
-      fullName: dto.fullName,
-      dni: dto.dni,
-      email: dto.email || null,
-      status: UserStatus.PENDIENTE,
-    });
-    const savedUser = await this.userRepo.save(user);
+    // Crear usuario + rol + perfil en una TRANSACCIÓN: si algo falla, se revierte
+    // todo (no quedan usuarios "a medias" sin perfil).
+    const savedUser = await this.userRepo.manager.transaction(async (em) => {
+      const user = await em.save(this.userRepo.create({
+        phoneE164: dto.phone,
+        passwordHash,
+        fullName: dto.fullName,
+        dni: dto.dni,
+        email: dto.email || null,
+        status: UserStatus.PENDIENTE,
+      }));
 
-    // Asignar rol
-    const role = this.roleRepo.create({
-      userId: savedUser.id,
-      role: dto.role,
-    });
-    await this.roleRepo.save(role);
+      await em.save(this.roleRepo.create({ userId: user.id, role: dto.role }));
 
-    // Crear perfil según rol
-    if (dto.role === 'PASAJERO') {
-      const passenger = this.passengerRepo.create({ userId: savedUser.id });
-      await this.passengerRepo.save(passenger);
-    } else if (dto.role === 'CONDUCTOR') {
-      if (!dto.licenseNumber || !dto.licenseClass || !dto.licenseExpiresAt) {
-        throw new BadRequestException('Conductor requiere licenseNumber, licenseClass y licenseExpiresAt');
+      if (dto.role === 'PASAJERO') {
+        await em.save(this.passengerRepo.create({ userId: user.id }));
+      } else if (dto.role === 'CONDUCTOR') {
+        await em.save(this.driverRepo.create({
+          userId: user.id,
+          licenseNumber: dto.licenseNumber,
+          licenseClass: dto.licenseClass,
+          licenseExpiresAt,
+        }));
       }
-      const driver = this.driverRepo.create({
-        userId: savedUser.id,
-        licenseNumber: dto.licenseNumber,
-        licenseClass: dto.licenseClass,
-        licenseExpiresAt: new Date(dto.licenseExpiresAt),
-      });
-      await this.driverRepo.save(driver);
-    }
+      return user;
+    });
 
     return {
       message: 'Usuario registrado exitosamente',
