@@ -44,6 +44,12 @@ export class TripsController {
     return this.tripsService.getCurrentRequest(user.sub);
   }
 
+  @Get(':id/invoice')
+  @ApiOperation({ summary: 'Obtener la boleta electrónica generada por el viaje' })
+  getTripInvoice(@Param('id') id: string) {
+    return this.tripsService.getTripInvoice(id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obtener detalle de un viaje' })
   getTrip(@Param('id') id: string) {

@@ -196,11 +196,13 @@ export class TripsService {
       });
       results.push({
         id: trip.id,
+        bookingId: booking?.id ?? null,
         status: trip.status,
         fare: trip.baseFarePen,
         createdAt: trip.createdAt,
         driver: { fullName: trip.driver?.user?.fullName || 'Conductor' },
-        passenger: { fullName: booking?.passenger?.user?.fullName || 'Pasajero' }
+        passenger: { fullName: booking?.passenger?.user?.fullName || 'Pasajero' },
+        invoice: await this.invoiceSummary(booking?.id),
       });
     }
 
@@ -208,17 +210,75 @@ export class TripsService {
       if (b.trip) {
         results.push({
           id: b.trip.id,
+          bookingId: b.id,
           status: b.trip.status,
           fare: b.farePen,
           createdAt: b.bookedAt,
           driver: { fullName: b.trip.driver?.user?.fullName || 'Conductor asignado' },
-          passenger: { fullName: b.passenger?.user?.fullName || 'Pasajero' }
+          passenger: { fullName: b.passenger?.user?.fullName || 'Pasajero' },
+          invoice: await this.invoiceSummary(b.id),
         });
       }
     }
 
     results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return results;
+  }
+
+  // Resumen mínimo de la boleta de una reserva (para listarla en el historial).
+  private async invoiceSummary(bookingId?: string | null) {
+    if (!bookingId) return null;
+    const inv = await this.invoiceRepo.findOne({ where: { bookingId } });
+    if (!inv) return null;
+    return {
+      id: inv.id,
+      serie: inv.series,
+      numero: inv.number,
+      total: Number(inv.totalPen),
+      sunatStatus: inv.sunatStatus,
+    };
+  }
+
+  // Boleta electrónica completa de un viaje (por su reserva), con datos del emisor.
+  async getTripInvoice(tripId: string) {
+    const booking = await this.bookingRepo.findOne({
+      where: { tripId },
+      relations: { passenger: { user: true }, trip: { route: true } },
+    });
+    if (!booking) throw new NotFoundException('Reserva del viaje no encontrada');
+
+    const invoice = await this.invoiceRepo.findOne({
+      where: { bookingId: booking.id },
+      relations: { company: true },
+    });
+    if (!invoice) {
+      throw new NotFoundException('Aún no se ha generado la boleta de este viaje');
+    }
+
+    return {
+      id: invoice.id,
+      tipo: invoice.type,
+      serie: invoice.series,
+      numero: invoice.number,
+      emitidaEl: invoice.issuedAt,
+      emisor: {
+        razonSocial: invoice.company?.legalName ?? 'ChaskiRutas',
+        ruc: invoice.company?.ruc ?? null,
+      },
+      cliente: {
+        tipoDoc: invoice.customerDocType,
+        doc: invoice.customerDoc,
+        nombre: invoice.customerName,
+      },
+      montos: {
+        subtotal: Number(invoice.subtotalPen),   // base imponible (sin IGV)
+        igv: Number(invoice.igvPen),              // IGV 18%
+        total: Number(invoice.totalPen),          // total que pagó el pasajero (incluye IGV)
+      },
+      sunatStatus: invoice.sunatStatus,
+      pdfUrl: invoice.pdfUrl,
+      ruta: booking.trip?.route?.name ?? 'Servicio de transporte',
+    };
   }
 
   // Completes booking lifecycle: Earning + Nubefact Invoice

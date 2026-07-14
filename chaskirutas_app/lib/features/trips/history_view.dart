@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
-import '../../core/api_client.dart';
 import '../auth/auth_provider.dart';
+import 'invoice_view.dart';
 
 class HistoryView extends ConsumerStatefulWidget {
   const HistoryView({super.key});
@@ -90,17 +90,16 @@ class _TripHistoryCard extends ConsumerWidget {
     final status = trip['status'] ?? 'UNKNOWN';
     final amount = trip['fare'] != null ? 'S/ ${trip['fare']}' : 'S/ --';
     final date = trip['createdAt'] != null ? DateTime.parse(trip['createdAt']).toLocal().toString().substring(0, 16) : '--';
-    
+    final invoice = trip['invoice'];
+    final tripId = trip['id']?.toString();
+
     Color statusColor;
-    switch (status) {
-      case 'COMPLETED':
-        statusColor = ChaskiTheme.accent;
-        break;
-      case 'CANCELLED':
-        statusColor = ChaskiTheme.danger;
-        break;
-      default:
-        statusColor = ChaskiTheme.warning;
+    if (status == 'COMPLETADO') {
+      statusColor = ChaskiTheme.accent;
+    } else if (status.toString().startsWith('CANCELADO') || status == 'NO_SHOW') {
+      statusColor = ChaskiTheme.danger;
+    } else {
+      statusColor = ChaskiTheme.warning;
     }
 
     return Container(
@@ -177,6 +176,29 @@ class _TripHistoryCard extends ConsumerWidget {
               ),
             ],
           ),
+          // Acceso a la boleta electrónica del viaje (si ya se generó).
+          if (invoice != null && tripId != null) ...[
+            const Divider(height: 24, color: ChaskiTheme.border),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(children: [
+                  const Icon(Icons.receipt_long_rounded, size: 16, color: ChaskiTheme.accent),
+                  const SizedBox(width: 6),
+                  Text('Boleta ${invoice['serie'] ?? ''}-${invoice['numero'] ?? ''}',
+                      style: const TextStyle(color: ChaskiTheme.textSecondary, fontSize: 12)),
+                ]),
+                TextButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => InvoiceView(tripId: tripId)),
+                  ),
+                  icon: const Icon(Icons.visibility_rounded, size: 16),
+                  label: const Text('Ver Boleta'),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -6,6 +6,7 @@ import '../auth/auth_provider.dart';
 import '../../core/theme.dart';
 import '../../core/socket_service.dart';
 import 'declaration_view.dart';
+import '../trips/invoice_view.dart';
 
 class DriverHomeView extends ConsumerStatefulWidget {
   const DriverHomeView({super.key});
@@ -315,6 +316,7 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
 
   void _updateTripStatus(String newStatus) async {
     if (_activeTripId == null) return;
+    final completedTripId = _activeTripId; // capturar antes de limpiar el estado
 
     final client = ref.read(apiClientProvider);
     try {
@@ -340,12 +342,12 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
         }
       });
 
-      if (mounted) {
+      if (newStatus == 'COMPLETADO') {
+        if (mounted && completedTripId != null) _showInvoiceGeneratedDialog(completedTripId);
+      } else if (mounted) {
         String msg = '';
         if (newStatus == 'EN_CAMINO') msg = '¡Viaje aceptado! En camino a recoger al pasajero.';
         if (newStatus == 'EN_CURSO') msg = '¡Viaje iniciado! Conduciendo hacia el destino.';
-        if (newStatus == 'COMPLETADO') msg = '¡Viaje finalizado con éxito! Boleta de SUNAT generada.';
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.green),
         );
@@ -357,6 +359,36 @@ class _DriverHomeViewState extends ConsumerState<DriverHomeView> {
         );
       }
     }
+  }
+
+  // Aviso visual de que se emitió la boleta electrónica del viaje completado.
+  void _showInvoiceGeneratedDialog(String tripId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ChaskiTheme.cardColor,
+        title: Row(children: const [
+          Icon(Icons.receipt_long_rounded, color: ChaskiTheme.accent),
+          SizedBox(width: 10),
+          Expanded(child: Text('¡Viaje completado!')),
+        ]),
+        content: const Text(
+          'Se generó automáticamente la boleta electrónica (SUNAT) por este viaje.\n\n'
+          'Puedes verla ahora o consultarla luego en tu historial de viajes.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceView(tripId: tripId)));
+            },
+            icon: const Icon(Icons.visibility_rounded, size: 18),
+            label: const Text('Ver Boleta'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _uploadDni(String dni) async {
